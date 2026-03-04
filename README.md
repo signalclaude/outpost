@@ -1,36 +1,30 @@
-# ⛺ outpost
+# outpost
 
 Your outpost to Outlook — from the terminal.
 
-A fast, natural-language-friendly CLI for Microsoft Outlook **Tasks**, **Calendar**, and **Email** via the Microsoft Graph API. Designed to be both human-friendly and AI-agent-friendly.
+A fast CLI for Microsoft **Tasks**, **Calendar**, **Email**, **Contacts**, and **Teams** via the Microsoft Graph API. Human-friendly with natural-language dates, AI-agent-ready with JSON output and an MCP server for Claude Desktop.
 
 ## Why?
 
-- **No more clicking through Outlook's UI** for quick tasks
+- **No more context switching** — manage Outlook without leaving the terminal
 - **Natural language dates** — `tomorrow 9am`, `next friday`, `in 2 hours`
-- **AI-agent ready** — JSON output mode on every command, perfect for use with Claude, GPT, etc.
-- **One tool** for Tasks, Calendar, and Email
+- **AI-agent ready** — JSON output mode on every command, plus a built-in MCP server with 35 tools
+- **One tool** for Tasks, Calendar, Email, Contacts, and Teams
+- **Optional features** — Teams requires extra permissions, so it's opt-in during setup
 
-## Quick Examples
+## Quick Start
 
 ```bash
-# Add a task due tomorrow at 9am
-outpost task add "Review PR for auth module" --due tomorrow --time 9am
+# Install
+pip install -e .
 
-# See today's calendar
+# Connect your Microsoft account
+outpost setup
+
+# You're ready
+outpost task list
 outpost cal today
-
-# Add a meeting
-outpost cal add "Team standup" --start "tomorrow 9:00" --duration 30
-
-# Check unread emails
 outpost mail list --unread
-
-# Send a quick email
-outpost mail send --to "bob@work.com" --subject "Status update" --body "All good!"
-
-# JSON output for scripting / AI agents
-outpost task list --json
 ```
 
 ## Setup
@@ -38,18 +32,12 @@ outpost task list --json
 ### Prerequisites
 - Python 3.10+
 - A Microsoft 365 account (personal or work/school)
-- An Azure AD app registration ([setup guide](docs/setup-guide.md))
 
-### Install
-```bash
-pip install outpost-cli
-```
-
-Or from source:
+### Install from source
 ```bash
 git clone https://github.com/YOUR_USERNAME/outpost.git
 cd outpost
-pip install -e .
+pip install -e ".[dev]"
 ```
 
 ### First Run
@@ -57,68 +45,161 @@ pip install -e .
 outpost setup
 ```
 
-This walks you through connecting your Microsoft account. You'll need your Azure AD client ID — see the [setup guide](docs/setup-guide.md) for a 5-minute walkthrough.
+This walks you through connecting your Microsoft account using device code flow. You'll be prompted to optionally enable Teams access (requires additional permissions — see [Permissions](docs/permissions.md)).
+
+### Multi-Account Support
+```bash
+outpost --profile work setup
+outpost --profile personal setup
+outpost --profile work cal today
+```
 
 ## Commands
 
 ### Tasks (Microsoft To Do)
-| Command | Description |
-|---------|-------------|
-| `outpost task add "title"` | Add a task |
-| `outpost task list` | List tasks |
-| `outpost task list --due today` | Tasks due today |
-| `outpost task complete <id>` | Mark complete |
-| `outpost task delete <id>` | Delete a task |
-
-### Calendar
-| Command | Description |
-|---------|-------------|
-| `outpost cal add "title" --start "..."` | Create event |
-| `outpost cal today` | Today's schedule |
-| `outpost cal list --week` | This week's events |
-| `outpost cal delete <id>` | Delete an event |
-
-### Email
-| Command | Description |
-|---------|-------------|
-| `outpost mail list` | Recent inbox |
-| `outpost mail list --unread` | Unread only |
-| `outpost mail read <id>` | Read a message |
-| `outpost mail send --to "..." --subject "..."` | Send email |
-| `outpost mail search "query"` | Search messages |
-
-### Global Options
-- `--json` — JSON output on any command (for scripting and AI agents)
-- `--account <name>` — Use a specific account (multi-account support)
-
-## AI Agent Integration
-
-Every command supports `--json` output, making it easy to integrate with AI tools:
-
 ```bash
-# Pipe your schedule to an AI for analysis
-outpost cal today --json | claude "What's my next meeting?"
-
-# Automate task creation from any AI workflow
-outpost task add "$(claude 'what should I work on next?')" --due today
+outpost task add "Review PR" --due tomorrow --priority high
+outpost task list                         # all tasks
+outpost task list --due today             # tasks due today
+outpost task list --list "Work"           # tasks in a specific list
+outpost task update <id> --title "New title"
+outpost task complete <id>
+outpost task delete <id>
+outpost task lists                        # list all task lists
+outpost task lists-create "Shopping"
+outpost task lists-delete <list-id>
 ```
 
-See [agent-integration.md](docs/agent-integration.md) for more details.
+### Calendar
+```bash
+outpost cal add "Standup" --start "tomorrow 9am" --duration 15
+outpost cal add "Review" --start "friday 2pm" --end "friday 3pm" --attendee alice@work.com
+outpost cal today                         # today's events
+outpost cal next                          # next upcoming event
+outpost cal next --count 5                # next 5 events
+outpost cal list --week                   # this week
+outpost cal list --date "next monday"     # specific day
+outpost cal update <id> --title "New title"
+outpost cal delete <id>
+```
 
-## Roadmap
+### Email
+```bash
+outpost mail list                         # recent inbox
+outpost mail list --unread                # unread only
+outpost mail list --folder sentitems      # sent items
+outpost mail read <id>                    # read a message
+outpost mail read <id> --download         # read + download attachments
+outpost mail send --to "bob@work.com" --subject "Update" --body "All good!"
+outpost mail send --to "bob@work.com" --subject "Report" --body "See attached" --attach report.pdf
+outpost mail reply <id> --body "Thanks!"
+outpost mail search "quarterly report"
+outpost mail delete <id>
+```
 
-- [x] Auth via device code flow
-- [x] Tasks — add, list, complete
-- [x] Calendar — add, list, today view
-- [ ] Email — list, read, send, search
-- [ ] Multi-account support
-- [ ] Natural language mode (`outpost "schedule lunch with Sarah Friday"`)
-- [ ] Shell completions (bash/zsh/fish/PowerShell)
-- [ ] Recurring events and tasks
+### Contacts
+```bash
+outpost contact list                      # all contacts
+outpost contact search "alice"            # search by name or email
+```
 
-## Contributing
+### Teams (opt-in)
+Requires enabling Teams during `outpost setup`. See [Permissions](docs/permissions.md) for details.
 
-PRs welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+```bash
+outpost teams list                        # your joined teams
+outpost teams channels <team-id>          # channels in a team
+outpost teams messages <team-id> <channel-id>          # read messages
+outpost teams send <team-id> <channel-id> --body "Hi team!"
+outpost teams files <team-id> <channel-id>             # SharePoint files
+outpost teams download <drive-id> <item-id>            # download a file
+outpost teams upload <drive-id> <parent-id> report.pdf # upload a file
+```
+
+### Global Options
+- `--output json|table` — output format (default: table). JSON mode on every command for scripting and AI agents
+- `--profile <name>` — use a named profile for multi-account support
+- `--full-id` — show full IDs on list commands (default: truncated to 8 chars)
+
+## MCP Server (Claude Desktop Integration)
+
+Outpost includes a built-in MCP server with 35 tools, enabling Claude Desktop to manage your Outlook directly.
+
+### Setup for Claude Desktop
+
+Add to your Claude Desktop config (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "outpost": {
+      "command": "outpost-mcp",
+      "args": []
+    }
+  }
+}
+```
+
+Or run manually:
+```bash
+outpost mcp serve                         # stdio (default)
+outpost mcp serve --transport sse --port 8080  # SSE transport
+```
+
+### MCP Tools
+
+| Category | Tools |
+|----------|-------|
+| Tasks | `task_add`, `task_list`, `task_update`, `task_complete`, `task_delete`, `task_lists`, `task_lists_create`, `task_lists_delete` |
+| Calendar | `cal_add`, `cal_today`, `cal_list`, `cal_next`, `cal_update`, `cal_delete` |
+| Email | `mail_list`, `mail_read`, `mail_send`, `mail_reply`, `mail_delete`, `mail_search`, `mail_attachments`, `mail_download_attachment` |
+| Contacts | `contact_list`, `contact_search` |
+| Teams | `teams_list`, `teams_channels`, `teams_messages`, `teams_send`, `teams_files`, `teams_download`, `teams_upload` |
+| Workspace | `teams_workspace_list`, `teams_workspace_read`, `teams_workspace_write` |
+| Auth | `auth_status` |
+
+### MCP Workspace
+
+Teams file operations use a transient workspace directory (`%TEMP%/outpost/workspace`) so Claude Desktop can download, modify, and re-upload files:
+
+1. `teams_download` — download a file from Teams to the workspace
+2. `teams_workspace_read` — read the file content
+3. `teams_workspace_write` — write modified content back
+4. `teams_upload` — upload the file back to Teams/SharePoint
+
+The workspace is automatically cleaned each time the MCP server starts.
+
+## Authentication
+
+Outpost uses MSAL device code flow with a pre-registered multi-tenant Azure AD app. Token caching uses OS-level encryption where available (DPAPI on Windows, Keychain on macOS, libsecret on Linux).
+
+For details on which permissions are required and how optional features work, see [Permissions](docs/permissions.md).
+
+## Development
+
+```bash
+# Install with dev dependencies
+pip install -e ".[dev]"
+
+# Run tests (280 passing)
+pytest
+
+# Run tests with verbose output
+pytest -v
+```
+
+### Project Structure
+```
+src/outpost/
+  api/           # Graph API modules (tasks, calendar, mail, contacts, teams)
+  formatters/    # Rich table + JSON output formatters
+  utils/         # Date parsing utilities
+  cli.py         # Typer CLI commands
+  config.py      # Configuration, scopes, workspace
+  auth.py        # MSAL device code flow
+  mcp_server.py  # FastMCP server (35 tools)
+tests/           # pytest + respx mocked tests
+```
 
 ## License
 
