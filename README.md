@@ -30,7 +30,7 @@ A fast CLI for Microsoft **Tasks**, **Calendar**, **Email**, **Contacts**, and *
 
 ```bash
 # Install
-pip install -e .
+pip install git+https://github.com/signalclaude/outpost.git
 
 # Connect your Microsoft account
 outpost setup
@@ -47,9 +47,21 @@ outpost mail list --unread
 - Python 3.10+
 - A Microsoft 365 account (personal or work/school)
 
-### Install from source
+### Install
 ```bash
-git clone https://github.com/YOUR_USERNAME/outpost.git
+pip install git+https://github.com/signalclaude/outpost.git
+```
+
+To install a specific release:
+```bash
+pip install git+https://github.com/signalclaude/outpost.git@v0.1.1
+```
+
+Or download a wheel directly from [Releases](https://github.com/signalclaude/outpost/releases).
+
+### Install from source (for development)
+```bash
+git clone https://github.com/signalclaude/outpost.git
 cd outpost
 pip install -e ".[dev]"
 ```
