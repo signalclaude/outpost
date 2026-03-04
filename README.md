@@ -163,12 +163,30 @@ Add to your Claude Desktop config (`claude_desktop_config.json`):
     "outpost": {
       "command": "outpost-mcp",
       "args": []
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "<workspace-path>"
+      ]
     }
   }
 }
 ```
 
-Or run manually:
+The `filesystem` server is optional but recommended — it gives Claude Desktop direct access to files in the workspace directory. Replace `<workspace-path>` with your actual workspace path:
+
+```bash
+python -c "import tempfile; print(tempfile.gettempdir() + '/outpost/workspace')"
+```
+
+Use double backslashes in the JSON config on Windows (e.g. `C:\\Temp\\outpost\\workspace`).
+
+> **Note:** Run `outpost setup` first to create the workspace directory, or the filesystem server will fail to start.
+
+Or run the MCP server manually:
 ```bash
 outpost mcp serve                         # stdio (default)
 outpost mcp serve --transport sse --port 8080  # SSE transport
@@ -199,36 +217,6 @@ Teams file operations use a transient workspace directory (`%TEMP%/outpost/works
 Binary files (DOCX, XLSX, PPTX, PDF) are read-only — extract and analyze their content, but don't modify and re-upload them (formatting would be lost).
 
 The workspace is automatically cleaned each time the MCP server starts.
-
-#### Reading Binary Files (DOCX, PDF, XLSX, etc.)
-
-`teams_workspace_read` handles plain text files. For binary files, add the official [MCP Filesystem Server](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem) alongside Outpost so Claude Desktop can read files directly from the workspace:
-
-```json
-{
-  "mcpServers": {
-    "outpost": {
-      "command": "outpost-mcp",
-      "args": []
-    },
-    "filesystem": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-filesystem",
-        "<workspace-path>"
-      ]
-    }
-  }
-}
-```
-
-Replace `<workspace-path>` with the actual workspace directory on your system. To find it, run:
-```bash
-python -c "import tempfile; print(tempfile.gettempdir() + '/outpost/workspace')"
-```
-
-Use double backslashes in the JSON config on Windows (e.g. `C:\\Temp\\outpost\\workspace`). When Claude downloads a binary file via `teams_download`, it will automatically use the filesystem server to read it at the returned workspace path.
 
 ## Authentication
 
