@@ -11,7 +11,9 @@ A fast CLI for Microsoft **Tasks**, **Calendar**, **Email**, **Contacts**, and *
 | Terminal-native | **Yes** | No | No | Library only | Library only |
 | Natural language dates | **Yes** | No | No | No | No |
 | Tasks + Calendar + Mail + Teams | **All-in-one** | Yes | Yes | Partial | Raw API |
-| MCP server (Claude Desktop) | **35 tools** | No | No | No | No |
+| Teams channel files (browse/download) | **Yes** | Yes | Yes | No | Raw API |
+| Office/PDF text extraction (DOCX, XLSX, PPTX, PDF) | **Built-in** | Native | Native | No | No |
+| MCP server (Claude Desktop) | **36 tools** | No | No | No | No |
 | JSON output for scripting | **Every command** | No | No | Manual | Manual |
 | Multi-account profiles | **Yes** | Yes | Tab switching | Manual | Manual |
 | Optional permission scopes | **Opt-in per feature** | All or nothing | All or nothing | Manual | Manual |
@@ -22,7 +24,7 @@ A fast CLI for Microsoft **Tasks**, **Calendar**, **Email**, **Contacts**, and *
 
 - **No more context switching** — manage Outlook without leaving the terminal
 - **Natural language dates** — `tomorrow 9am`, `next friday`, `in 2 hours`
-- **AI-agent ready** — JSON output mode on every command, plus a built-in MCP server with 35 tools
+- **AI-agent ready** — JSON output mode on every command, plus a built-in MCP server with 36 tools
 - **One tool** for Tasks, Calendar, Email, Contacts, and Teams
 - **Optional features** — Teams requires extra permissions, so it's opt-in during setup
 
@@ -149,7 +151,7 @@ outpost teams upload <drive-id> <parent-id> report.pdf # upload a file
 
 ## MCP Server (Claude Desktop Integration)
 
-Outpost includes a built-in MCP server with 35 tools, enabling Claude Desktop to manage your Outlook directly.
+Outpost includes a built-in MCP server with 36 tools, enabling Claude Desktop to manage your Outlook directly.
 
 ### Setup for Claude Desktop
 
@@ -264,7 +266,7 @@ src/outpost/
   cli.py         # Typer CLI commands
   config.py      # Configuration, scopes, workspace
   auth.py        # MSAL device code flow
-  mcp_server.py  # FastMCP server (35 tools)
+  mcp_server.py  # FastMCP server (36 tools)
 tests/           # pytest + respx mocked tests
 ```
 
