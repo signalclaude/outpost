@@ -56,14 +56,18 @@ def parse_time_string(text: str) -> time:
     return result.time()
 
 
-def to_graph_datetime(dt: datetime) -> dict:
+def to_graph_datetime(dt: datetime, timezone: str = "UTC") -> dict:
     """Format a datetime for the Microsoft Graph API.
 
-    Returns: {"dateTime": "2026-03-15T09:00:00", "timeZone": "UTC"}
+    Args:
+        dt: The datetime to format
+        timezone: IANA timezone name (e.g. 'America/New_York', 'UTC')
+
+    Returns: {"dateTime": "2026-03-15T09:00:00", "timeZone": "America/New_York"}
     """
     return {
         "dateTime": dt.strftime("%Y-%m-%dT%H:%M:%S"),
-        "timeZone": "UTC",
+        "timeZone": timezone,
     }
 
 

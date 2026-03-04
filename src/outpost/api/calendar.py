@@ -9,6 +9,9 @@ from outpost.utils.dates import to_graph_datetime, today_range
 DEFAULT_DURATION_MINUTES = 30
 
 
+VALID_SHOW_AS = ("free", "tentative", "busy", "oof", "workingElsewhere")
+
+
 def create_event(
     client: GraphClient,
     title: str,
@@ -16,6 +19,8 @@ def create_event(
     end: datetime | None = None,
     duration: int | None = None,
     attendees: list[str] | None = None,
+    show_as: str | None = None,
+    timezone: str = "UTC",
 ) -> dict:
     """Create a calendar event.
 
@@ -26,6 +31,8 @@ def create_event(
         end: End datetime (optional if duration is given)
         duration: Duration in minutes (optional, default 30 if no end)
         attendees: List of attendee email addresses (optional)
+        show_as: Free/busy status (free, tentative, busy, oof, workingElsewhere)
+        timezone: IANA timezone name (e.g. 'America/New_York')
 
     Returns: Created event dict from Graph API
     """
@@ -35,8 +42,8 @@ def create_event(
 
     body: dict = {
         "subject": title,
-        "start": to_graph_datetime(start),
-        "end": to_graph_datetime(end),
+        "start": to_graph_datetime(start, timezone=timezone),
+        "end": to_graph_datetime(end, timezone=timezone),
     }
 
     if attendees:
@@ -44,6 +51,11 @@ def create_event(
             {"emailAddress": {"address": email}, "type": "required"}
             for email in attendees
         ]
+
+    if show_as is not None:
+        if show_as not in VALID_SHOW_AS:
+            raise ValueError(f"Invalid showAs value: {show_as!r}. Must be one of {VALID_SHOW_AS}")
+        body["showAs"] = show_as
 
     return client.post("/me/events", json=body)
 
@@ -96,20 +108,26 @@ def update_event(
     start: datetime | None = None,
     end: datetime | None = None,
     attendees: list[str] | None = None,
+    show_as: str | None = None,
+    timezone: str = "UTC",
 ) -> dict:
     """Update an existing calendar event. Only provided fields are changed."""
     body: dict = {}
     if title is not None:
         body["subject"] = title
     if start is not None:
-        body["start"] = to_graph_datetime(start)
+        body["start"] = to_graph_datetime(start, timezone=timezone)
     if end is not None:
-        body["end"] = to_graph_datetime(end)
+        body["end"] = to_graph_datetime(end, timezone=timezone)
     if attendees is not None:
         body["attendees"] = [
             {"emailAddress": {"address": email}, "type": "required"}
             for email in attendees
         ]
+    if show_as is not None:
+        if show_as not in VALID_SHOW_AS:
+            raise ValueError(f"Invalid showAs value: {show_as!r}. Must be one of {VALID_SHOW_AS}")
+        body["showAs"] = show_as
     return client.patch(f"/me/events/{event_id}", json=body)
 
 

@@ -89,6 +89,17 @@ class TestCreateEvent:
         assert body["start"]["timeZone"] == "UTC"
         assert body["end"]["timeZone"] == "UTC"
 
+    def test_custom_timezone(self, client):
+        with respx.mock(base_url=GRAPH_BASE) as router:
+            route = router.post("/me/events").mock(
+                return_value=httpx.Response(201, json={"id": "evt-1"})
+            )
+            create_event(client, "Meeting", datetime(2026, 3, 15, 9, 0), timezone="America/New_York")
+
+        body = json.loads(route.calls[0].request.content)
+        assert body["start"]["timeZone"] == "America/New_York"
+        assert body["end"]["timeZone"] == "America/New_York"
+
 
 class TestGetCalendarView:
     def test_passes_date_range(self, client):
@@ -174,6 +185,19 @@ class TestUpdateEvent:
         assert "start" not in body
         assert "end" not in body
 
+    def test_update_with_timezone(self, client):
+        with respx.mock(base_url=GRAPH_BASE) as router:
+            route = router.patch("/me/events/evt-1").mock(
+                return_value=httpx.Response(200, json={"id": "evt-1"})
+            )
+            update_event(
+                client, "evt-1",
+                start=datetime(2026, 3, 20, 10, 0),
+                timezone="America/Chicago",
+            )
+        body = json.loads(route.calls[0].request.content)
+        assert body["start"]["timeZone"] == "America/Chicago"
+
 
 class TestGetNextEvents:
     def test_next_event(self, client):
@@ -234,6 +258,46 @@ class TestUpdateEventWithAttendees:
         body = json.loads(route.calls[0].request.content)
         assert len(body["attendees"]) == 1
         assert body["attendees"][0]["emailAddress"]["address"] == "carol@example.com"
+
+
+class TestCreateEventShowAs:
+    def test_show_as_oof(self, client):
+        with respx.mock(base_url=GRAPH_BASE) as router:
+            route = router.post("/me/events").mock(
+                return_value=httpx.Response(201, json={"id": "evt-1", "showAs": "oof"})
+            )
+            result = create_event(client, "PTO", datetime(2026, 3, 15, 9, 0), show_as="oof")
+        body = json.loads(route.calls[0].request.content)
+        assert body["showAs"] == "oof"
+        assert result["showAs"] == "oof"
+
+    def test_show_as_not_set_by_default(self, client):
+        with respx.mock(base_url=GRAPH_BASE) as router:
+            route = router.post("/me/events").mock(
+                return_value=httpx.Response(201, json={"id": "evt-1"})
+            )
+            create_event(client, "Meeting", datetime(2026, 3, 15, 9, 0))
+        body = json.loads(route.calls[0].request.content)
+        assert "showAs" not in body
+
+    def test_show_as_invalid(self, client):
+        with pytest.raises(ValueError, match="Invalid showAs"):
+            create_event(client, "Bad", datetime(2026, 3, 15, 9, 0), show_as="invalid")
+
+
+class TestUpdateEventShowAs:
+    def test_update_show_as(self, client):
+        with respx.mock(base_url=GRAPH_BASE) as router:
+            route = router.patch("/me/events/evt-1").mock(
+                return_value=httpx.Response(200, json={"id": "evt-1", "showAs": "free"})
+            )
+            update_event(client, "evt-1", show_as="free")
+        body = json.loads(route.calls[0].request.content)
+        assert body["showAs"] == "free"
+
+    def test_update_show_as_invalid(self, client):
+        with pytest.raises(ValueError, match="Invalid showAs"):
+            update_event(client, "evt-1", show_as="nope")
 
 
 class TestDeleteEvent:

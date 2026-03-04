@@ -37,6 +37,7 @@ from outpost.mcp_server import (
     teams_messages,
     teams_send,
     teams_upload,
+    teams_workspace_extract,
     teams_workspace_list,
     teams_workspace_read,
     teams_workspace_write,
@@ -462,6 +463,67 @@ def test_cal_add_with_attendees(mock_client_cls, mock_create, mock_token):
     assert call_args[1]["attendees"] == ["alice@example.com", "bob@example.com"]
 
 
+# ── cal_add / cal_update with show_as ────────────────────────────────────
+
+
+@patch("outpost.mcp_server.get_token", return_value="fake-token")
+@patch("outpost.api.calendar.create_event")
+@patch("outpost.mcp_server.GraphClient")
+def test_cal_add_with_show_as(mock_client_cls, mock_create, mock_token):
+    mock_create.return_value = {"id": "e1", "subject": "PTO", "showAs": "oof"}
+    result = cal_add(title="PTO", start="2026-03-15T09:00", show_as="oof")
+    call_args = mock_create.call_args
+    assert call_args[1]["show_as"] == "oof"
+    assert result["showAs"] == "oof"
+
+
+@patch("outpost.mcp_server.get_token", return_value="fake-token")
+@patch("outpost.api.calendar.update_event")
+@patch("outpost.mcp_server.GraphClient")
+def test_cal_update_with_show_as(mock_client_cls, mock_update, mock_token):
+    mock_update.return_value = {"id": "e1", "showAs": "free"}
+    result = cal_update(event_id="e1", show_as="free")
+    call_args = mock_update.call_args
+    assert call_args[1]["show_as"] == "free"
+    assert result["showAs"] == "free"
+
+
+# ── cal_add / cal_update with timezone ───────────────────────────────────
+
+
+@patch("outpost.mcp_server.load_config", return_value={"timezone": "America/New_York"})
+@patch("outpost.mcp_server.get_token", return_value="fake-token")
+@patch("outpost.api.calendar.create_event")
+@patch("outpost.mcp_server.GraphClient")
+def test_cal_add_uses_config_timezone(mock_client_cls, mock_create, mock_token, mock_config):
+    mock_create.return_value = {"id": "e1", "subject": "Meeting"}
+    cal_add(title="Meeting", start="2026-03-15T09:00")
+    call_args = mock_create.call_args
+    assert call_args[1]["timezone"] == "America/New_York"
+
+
+@patch("outpost.mcp_server.load_config", return_value={"timezone": "America/New_York"})
+@patch("outpost.mcp_server.get_token", return_value="fake-token")
+@patch("outpost.api.calendar.create_event")
+@patch("outpost.mcp_server.GraphClient")
+def test_cal_add_timezone_override(mock_client_cls, mock_create, mock_token, mock_config):
+    mock_create.return_value = {"id": "e1", "subject": "Meeting"}
+    cal_add(title="Meeting", start="2026-03-15T09:00", timezone="Europe/London")
+    call_args = mock_create.call_args
+    assert call_args[1]["timezone"] == "Europe/London"
+
+
+@patch("outpost.mcp_server.load_config", return_value={"timezone": "America/Chicago"})
+@patch("outpost.mcp_server.get_token", return_value="fake-token")
+@patch("outpost.api.calendar.update_event")
+@patch("outpost.mcp_server.GraphClient")
+def test_cal_update_uses_config_timezone(mock_client_cls, mock_update, mock_token, mock_config):
+    mock_update.return_value = {"id": "e1"}
+    cal_update(event_id="e1", start="2026-03-20T10:00")
+    call_args = mock_update.call_args
+    assert call_args[1]["timezone"] == "America/Chicago"
+
+
 # ── mail_list with unread ────────────────────────────────────────────────
 
 
@@ -608,6 +670,17 @@ def test_teams_workspace_read(tmp_path):
     assert result["content"] == "hello world"
 
 
+def test_teams_workspace_read_binary(tmp_path):
+    (tmp_path / "report.docx").write_bytes(b"\x50\x4b\x03\x04\x00\x00\xff\xff")
+    with patch("outpost.mcp_server.get_workspace_dir", return_value=tmp_path):
+        result = teams_workspace_read(filename="report.docx")
+    assert result["binary"] is True
+    assert result["filename"] == "report.docx"
+    assert result["size"] == 8
+    assert "filesystem server" in result["hint"]
+    assert "content" not in result
+
+
 def test_teams_workspace_read_not_found(tmp_path):
     with patch("outpost.mcp_server.get_workspace_dir", return_value=tmp_path):
         with pytest.raises(RuntimeError, match="File not found"):
@@ -626,3 +699,61 @@ def test_teams_workspace_write_overwrite(tmp_path):
     with patch("outpost.mcp_server.get_workspace_dir", return_value=tmp_path):
         teams_workspace_write(filename="existing.txt", content="updated")
     assert (tmp_path / "existing.txt").read_text(encoding="utf-8") == "updated"
+
+
+# ── teams_workspace_extract ────────────────────────────────────────────
+
+
+def test_teams_workspace_extract_docx(tmp_path):
+    from docx import Document
+    doc = Document()
+    doc.add_paragraph("Hello from Outpost")
+    doc.add_paragraph("Second paragraph")
+    doc.save(str(tmp_path / "test.docx"))
+    with patch("outpost.mcp_server.get_workspace_dir", return_value=tmp_path):
+        result = teams_workspace_extract(filename="test.docx")
+    assert result["format"] == ".docx"
+    assert "Hello from Outpost" in result["content"]
+    assert "Second paragraph" in result["content"]
+
+
+def test_teams_workspace_extract_xlsx(tmp_path):
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Data"
+    ws.append(["Name", "Value"])
+    ws.append(["Alpha", 42])
+    wb.save(str(tmp_path / "test.xlsx"))
+    with patch("outpost.mcp_server.get_workspace_dir", return_value=tmp_path):
+        result = teams_workspace_extract(filename="test.xlsx")
+    assert result["format"] == ".xlsx"
+    assert "Alpha" in result["content"]
+    assert "42" in result["content"]
+
+
+def test_teams_workspace_extract_pptx(tmp_path):
+    from pptx import Presentation
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[1])
+    slide.shapes.title.text = "Slide Title"
+    slide.placeholders[1].text = "Bullet point"
+    prs.save(str(tmp_path / "test.pptx"))
+    with patch("outpost.mcp_server.get_workspace_dir", return_value=tmp_path):
+        result = teams_workspace_extract(filename="test.pptx")
+    assert result["format"] == ".pptx"
+    assert "Slide Title" in result["content"]
+    assert "Bullet point" in result["content"]
+
+
+def test_teams_workspace_extract_unsupported(tmp_path):
+    (tmp_path / "image.png").write_bytes(b"\x89PNG")
+    with patch("outpost.mcp_server.get_workspace_dir", return_value=tmp_path):
+        with pytest.raises(RuntimeError, match="Unsupported file type"):
+            teams_workspace_extract(filename="image.png")
+
+
+def test_teams_workspace_extract_not_found(tmp_path):
+    with patch("outpost.mcp_server.get_workspace_dir", return_value=tmp_path):
+        with pytest.raises(RuntimeError, match="File not found"):
+            teams_workspace_extract(filename="missing.docx")

@@ -8,7 +8,7 @@ from fastmcp import FastMCP
 
 from outpost.api.client import GraphClient
 from outpost.auth import get_auth_status, get_token
-from outpost.config import clean_workspace, get_workspace_dir
+from outpost.config import clean_workspace, get_workspace_dir, load_config
 from outpost.utils.dates import (
     parse_natural_date,
     parse_natural_datetime,
@@ -82,6 +82,8 @@ def cal_add(
     end: Optional[str] = None,
     duration: Optional[int] = None,
     attendees: Optional[str] = None,
+    show_as: Optional[str] = None,
+    timezone: Optional[str] = None,
 ) -> dict:
     """Add a calendar event to Outlook.
 
@@ -91,14 +93,17 @@ def cal_add(
         end: End time (optional if duration is given)
         duration: Duration in minutes (default 30 if neither end nor duration given)
         attendees: Comma-separated attendee email addresses (optional)
+        show_as: Free/busy status — free, tentative, busy, oof (Out of Office), or workingElsewhere (optional)
+        timezone: IANA timezone (e.g. 'America/New_York'). Defaults to value from outpost config.
     """
     from outpost.api.calendar import create_event
 
     client = _get_client()
+    tz = timezone or load_config().get("timezone", "UTC")
     start_dt = parse_natural_datetime(start)
     end_dt = parse_natural_datetime(end) if end else None
     attendee_list = [a.strip() for a in attendees.split(",")] if attendees else None
-    return create_event(client, title, start_dt, end=end_dt, duration=duration, attendees=attendee_list)
+    return create_event(client, title, start_dt, end=end_dt, duration=duration, attendees=attendee_list, show_as=show_as, timezone=tz)
 
 
 @mcp.tool()
@@ -241,6 +246,8 @@ def cal_update(
     start: Optional[str] = None,
     end: Optional[str] = None,
     attendees: Optional[str] = None,
+    show_as: Optional[str] = None,
+    timezone: Optional[str] = None,
 ) -> dict:
     """Update an existing calendar event in Outlook.
 
@@ -250,14 +257,17 @@ def cal_update(
         start: New start time — natural language or ISO format (optional)
         end: New end time — natural language or ISO format (optional)
         attendees: Comma-separated attendee emails (optional)
+        show_as: Free/busy status — free, tentative, busy, oof (Out of Office), or workingElsewhere (optional)
+        timezone: IANA timezone (e.g. 'America/New_York'). Defaults to value from outpost config.
     """
     from outpost.api.calendar import update_event
 
     client = _get_client()
+    tz = timezone or load_config().get("timezone", "UTC")
     start_dt = parse_natural_datetime(start) if start else None
     end_dt = parse_natural_datetime(end) if end else None
     attendee_list = [a.strip() for a in attendees.split(",")] if attendees else None
-    return update_event(client, event_id, title=title, start=start_dt, end=end_dt, attendees=attendee_list)
+    return update_event(client, event_id, title=title, start=start_dt, end=end_dt, attendees=attendee_list, show_as=show_as, timezone=tz)
 
 
 @mcp.tool()
@@ -512,8 +522,9 @@ def teams_files(team_id: str, channel_id: str) -> list[dict]:
 def teams_download(drive_id: str, item_id: str) -> dict:
     """Download a file from Teams/SharePoint to the local workspace.
 
-    The file is saved to the transient workspace directory. Use teams_workspace_read
-    to read it, teams_workspace_write to modify it, and teams_upload to push changes back.
+    The file is saved to the local workspace. To read or analyze the file, use the
+    filesystem server to read it at the returned workspace_path. Use teams_workspace_read
+    only for plain text files. Use teams_upload to push changes back.
 
     Args:
         drive_id: Drive ID
@@ -534,7 +545,9 @@ def teams_download(drive_id: str, item_id: str) -> dict:
 def teams_upload(drive_id: str, parent_item_id: str, filename: str) -> dict:
     """Upload a file from the workspace to Teams/SharePoint.
 
-    The file must already exist in the workspace (e.g. from teams_download or teams_workspace_write).
+    Best suited for text-based files created with teams_workspace_write (markdown,
+    CSV, plain text). Binary files (DOCX, XLSX, etc.) should be treated as read-only
+    — use teams_workspace_extract to read them, not modify and re-upload.
 
     Args:
         drive_id: Drive ID
@@ -555,7 +568,11 @@ def teams_upload(drive_id: str, parent_item_id: str, filename: str) -> dict:
 
 @mcp.tool()
 def teams_workspace_list() -> list[dict]:
-    """List files currently in the transient workspace directory."""
+    """List files currently in the transient workspace directory.
+
+    For binary files (docx, pdf, xlsx, etc.), read them directly at the returned
+    path using the filesystem server.
+    """
     workspace = get_workspace_dir()
     files = []
     for item in workspace.iterdir():
@@ -572,6 +589,9 @@ def teams_workspace_list() -> list[dict]:
 def teams_workspace_read(filename: str) -> dict:
     """Read a text file from the workspace directory.
 
+    For binary files (docx, pdf, xlsx, etc.), this tool returns metadata and a path
+    hint instead of content. Use the filesystem server to read binary files directly.
+
     Args:
         filename: Name of the file to read
     """
@@ -579,24 +599,105 @@ def teams_workspace_read(filename: str) -> dict:
     filepath = workspace / filename
     if not filepath.exists():
         raise RuntimeError(f"File not found in workspace: {filename}")
-    content = filepath.read_text(encoding="utf-8")
+    try:
+        content = filepath.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, ValueError):
+        return {
+            "filename": filename,
+            "size": filepath.stat().st_size,
+            "path": str(filepath),
+            "binary": True,
+            "hint": f"Binary file — read it directly at {filepath} using the filesystem server",
+        }
     return {"filename": filename, "content": content}
 
 
 @mcp.tool()
 def teams_workspace_write(filename: str, content: str) -> dict:
-    """Write text content to a file in the workspace directory.
+    """Write a text file to the workspace directory for sharing via Teams.
 
-    Creates or overwrites the file. Use this to save modified content before uploading.
+    For text-based formats only (markdown, CSV, plain text, etc.). Do not use this
+    to create or overwrite binary files (DOCX, XLSX, PPTX, PDF) — use
+    teams_workspace_extract to read those instead.
 
     Args:
-        filename: Name of the file to write
+        filename: Name of the file to write (e.g. 'notes.md', 'data.csv')
         content: Text content to write
     """
     workspace = get_workspace_dir()
     filepath = workspace / filename
     filepath.write_text(content, encoding="utf-8")
     return {"filename": filename, "size": filepath.stat().st_size, "path": str(filepath)}
+
+
+EXTRACTORS = {
+    ".docx": "_extract_docx",
+    ".xlsx": "_extract_xlsx",
+    ".pptx": "_extract_pptx",
+    ".pdf": "_extract_pdf",
+}
+
+
+def _extract_docx(filepath) -> str:
+    from docx import Document
+    doc = Document(str(filepath))
+    return "\n".join(p.text for p in doc.paragraphs)
+
+
+def _extract_xlsx(filepath) -> str:
+    from openpyxl import load_workbook
+    wb = load_workbook(str(filepath), read_only=True, data_only=True)
+    lines = []
+    for sheet in wb.sheetnames:
+        lines.append(f"--- Sheet: {sheet} ---")
+        for row in wb[sheet].iter_rows(values_only=True):
+            lines.append("\t".join(str(c) if c is not None else "" for c in row))
+    wb.close()
+    return "\n".join(lines)
+
+
+def _extract_pptx(filepath) -> str:
+    from pptx import Presentation
+    prs = Presentation(str(filepath))
+    lines = []
+    for i, slide in enumerate(prs.slides, 1):
+        lines.append(f"--- Slide {i} ---")
+        for shape in slide.shapes:
+            if shape.has_text_frame:
+                lines.append(shape.text_frame.text)
+    return "\n".join(lines)
+
+
+def _extract_pdf(filepath) -> str:
+    import pdfplumber
+    with pdfplumber.open(str(filepath)) as pdf:
+        return "\n".join(page.extract_text() or "" for page in pdf.pages)
+
+
+@mcp.tool()
+def teams_workspace_extract(filename: str) -> dict:
+    """Extract text content from a binary file in the workspace.
+
+    Supports DOCX, XLSX, PPTX, and PDF files. Returns the extracted plain text
+    content. Much faster than reading binary files through the filesystem server.
+
+    Args:
+        filename: Name of the file in the workspace to extract text from
+    """
+    workspace = get_workspace_dir()
+    filepath = workspace / filename
+    if not filepath.exists():
+        raise RuntimeError(f"File not found in workspace: {filename}")
+
+    ext = filepath.suffix.lower()
+    extractor_name = EXTRACTORS.get(ext)
+    if not extractor_name:
+        supported = ", ".join(EXTRACTORS.keys())
+        raise RuntimeError(f"Unsupported file type: {ext}. Supported: {supported}")
+
+    extractor = globals()[extractor_name]
+    text = extractor(filepath)
+    return {"filename": filename, "format": ext, "content": text}
 
 
 def main():

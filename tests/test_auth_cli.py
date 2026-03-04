@@ -14,25 +14,26 @@ runner = CliRunner()
 class TestSetup:
     def test_setup_calls_login(self):
         with patch("outpost.auth.login_interactive", return_value=True) as mock_login:
-            result = runner.invoke(app, ["setup"], input="n\n")
+            result = runner.invoke(app, ["setup"], input="n\nUTC\n")
         assert result.exit_code == 0
         mock_login.assert_called_once()
         assert "Welcome" in result.output
 
     def test_setup_no_client_id(self):
         with patch("outpost.auth.DEFAULT_CLIENT_ID", ""):
-            result = runner.invoke(app, ["setup"], input="n\n")
+            result = runner.invoke(app, ["setup"], input="n\nUTC\n")
         assert result.exit_code == 0
         assert "not configured" in result.output.lower() or "Azure" in result.output
 
     def test_setup_enable_teams(self):
         with patch("outpost.auth.login_interactive", return_value=True) as mock_login, \
              patch("outpost.config.save_config") as mock_save:
-            result = runner.invoke(app, ["setup"], input="y\n")
+            result = runner.invoke(app, ["setup"], input="y\nAmerica/New_York\n")
         assert result.exit_code == 0
         # Check that config was saved with teams enabled
         saved_config = mock_save.call_args[0][0]
         assert "teams" in saved_config["enabled_features"]
+        assert saved_config["timezone"] == "America/New_York"
         # Check that login was called with expanded scopes
         call_kwargs = mock_login.call_args[1]
         assert "Team.ReadBasic.All" in call_kwargs["scopes"]

@@ -286,18 +286,22 @@ def cal_add(
     end: Optional[str] = typer.Option(None, "--end", "-e", help="End time"),
     duration: Optional[int] = typer.Option(None, "--duration", "-d", help="Duration in minutes"),
     attendee: Optional[list[str]] = typer.Option(None, "--attendee", "-a", help="Attendee email (repeatable)"),
+    show_as: Optional[str] = typer.Option(None, "--show-as", help="Status: free|tentative|busy|oof|workingElsewhere"),
+    timezone: Optional[str] = typer.Option(None, "--timezone", "--tz", help="IANA timezone (e.g. America/New_York). Defaults to config."),
     output: str = typer.Option("table", "--output", "-o", help="Output format: table|json"),
 ):
     """Add a calendar event."""
     from outpost.api.calendar import create_event
+    from outpost.config import load_config
     from outpost.utils.dates import parse_natural_datetime
     from outpost.formatters.json_fmt import print_json
 
     client = _get_client()
+    tz = timezone or load_config().get("timezone", "UTC")
     start_dt = parse_natural_datetime(start)
     end_dt = parse_natural_datetime(end) if end else None
 
-    result = create_event(client, title, start_dt, end=end_dt, duration=duration, attendees=attendee)
+    result = create_event(client, title, start_dt, end=end_dt, duration=duration, attendees=attendee, show_as=show_as, timezone=tz)
 
     fmt = OutputFormat(output)
     if fmt == OutputFormat.json:
@@ -393,17 +397,21 @@ def cal_update(
     start: Optional[str] = typer.Option(None, "--start", "-s", help="New start time"),
     end: Optional[str] = typer.Option(None, "--end", "-e", help="New end time"),
     attendee: Optional[list[str]] = typer.Option(None, "--attendee", "-a", help="Attendee email (repeatable)"),
+    show_as: Optional[str] = typer.Option(None, "--show-as", help="Status: free|tentative|busy|oof|workingElsewhere"),
+    timezone: Optional[str] = typer.Option(None, "--timezone", "--tz", help="IANA timezone (e.g. America/New_York). Defaults to config."),
     output: str = typer.Option("table", "--output", "-o", help="Output format: table|json"),
 ):
     """Update an existing calendar event."""
     from outpost.api.calendar import update_event
+    from outpost.config import load_config
     from outpost.utils.dates import parse_natural_datetime
     from outpost.formatters.json_fmt import print_json
 
     client = _get_client()
+    tz = timezone or load_config().get("timezone", "UTC")
     start_dt = parse_natural_datetime(start) if start else None
     end_dt = parse_natural_datetime(end) if end else None
-    result = update_event(client, event_id, title=title, start=start_dt, end=end_dt, attendees=attendee)
+    result = update_event(client, event_id, title=title, start=start_dt, end=end_dt, attendees=attendee, show_as=show_as, timezone=tz)
 
     fmt = OutputFormat(output)
     if fmt == OutputFormat.json:
@@ -863,7 +871,7 @@ def require_feature(feature: str):
 def setup():
     """Interactive first-time setup wizard."""
     from outpost.auth import login_interactive
-    from outpost.config import load_config, save_config, get_active_scopes
+    from outpost.config import load_config, save_config, get_active_scopes, get_workspace_dir
 
     stderr.print("[bold]Welcome to Outpost![/bold]")
     stderr.print("Let's connect your Microsoft account.\n")
@@ -890,8 +898,19 @@ def setup():
         if "teams" in enabled:
             enabled.remove("teams")
 
+    # Prompt for timezone
+    current_tz = config.get("timezone", "UTC")
+    stderr.print(f"\n[bold]Timezone[/bold] (used for calendar events):")
+    stderr.print("  Enter an IANA timezone name, e.g. America/New_York, Europe/London, Asia/Tokyo")
+    stderr.print(f"  See: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones\n")
+    tz_answer = typer.prompt(f"Timezone", default=current_tz)
+    config["timezone"] = tz_answer
+
     config["enabled_features"] = enabled
     save_config(config)
+
+    # Ensure workspace directory exists for MCP filesystem server
+    get_workspace_dir()
 
     scopes = get_active_scopes(config)
     success = login_interactive(scopes=scopes)

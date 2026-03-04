@@ -41,6 +41,7 @@ DEFAULT_CONFIG = {
     "client_id": DEFAULT_CLIENT_ID,
     "default_output": "table",
     "enabled_features": [],
+    "timezone": "UTC",
 }
 
 
