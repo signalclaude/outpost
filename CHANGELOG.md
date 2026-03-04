@@ -2,7 +2,7 @@
 
 All notable changes to Outpost are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [0.1.2] — Unreleased
+## [0.1.2] — 2026-03-04
 
 ### Added
 - `outpost --version` / `-V` flag to display current version
