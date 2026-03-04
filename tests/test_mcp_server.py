@@ -31,6 +31,9 @@ from outpost.mcp_server import (
     task_lists_delete,
     task_update,
     teams_channels,
+    teams_chat_messages,
+    teams_chat_send,
+    teams_chats,
     teams_download,
     teams_files,
     teams_list,
@@ -588,6 +591,45 @@ def test_teams_send(mock_client_cls, mock_send, mock_token, mock_feature):
     result = teams_send(team_id="t1", channel_id="ch-1", body="Hello!")
     mock_send.assert_called_once_with(mock_client_cls.return_value, "t1", "ch-1", "Hello!")
     assert result["id"] == "m-new"
+
+
+@patch("outpost.config.is_feature_enabled", return_value=True)
+@patch("outpost.mcp_server.get_token", return_value="fake-token")
+@patch("outpost.api.teams.list_chats")
+@patch("outpost.mcp_server.GraphClient")
+def test_teams_chats(mock_client_cls, mock_list, mock_token, mock_feature):
+    mock_list.return_value = [{"id": "chat-1", "chatType": "oneOnOne"}]
+    result = teams_chats(top=10)
+    mock_list.assert_called_once_with(mock_client_cls.return_value, top=10)
+    assert len(result) == 1
+
+
+@patch("outpost.config.is_feature_enabled", return_value=True)
+@patch("outpost.mcp_server.get_token", return_value="fake-token")
+@patch("outpost.api.teams.list_chat_messages")
+@patch("outpost.mcp_server.GraphClient")
+def test_teams_chat_messages(mock_client_cls, mock_list, mock_token, mock_feature):
+    mock_list.return_value = [{"id": "m1", "body": {"content": "Hey"}}]
+    result = teams_chat_messages(chat_id="chat-1", top=10)
+    mock_list.assert_called_once_with(mock_client_cls.return_value, "chat-1", top=10)
+    assert len(result) == 1
+
+
+@patch("outpost.config.is_feature_enabled", return_value=True)
+@patch("outpost.mcp_server.get_token", return_value="fake-token")
+@patch("outpost.api.teams.send_chat_message")
+@patch("outpost.mcp_server.GraphClient")
+def test_teams_chat_send(mock_client_cls, mock_send, mock_token, mock_feature):
+    mock_send.return_value = {"id": "m-new"}
+    result = teams_chat_send(chat_id="chat-1", body="Hello!")
+    mock_send.assert_called_once_with(mock_client_cls.return_value, "chat-1", "Hello!")
+    assert result["id"] == "m-new"
+
+
+@patch("outpost.config.is_feature_enabled", return_value=False)
+def test_teams_chats_disabled(mock_feature):
+    with pytest.raises(RuntimeError, match="not enabled"):
+        teams_chats()
 
 
 @patch("outpost.config.is_feature_enabled", return_value=True)

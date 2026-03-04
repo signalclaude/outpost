@@ -27,6 +27,8 @@ Teams scopes are **only requested if you enable Teams** during `outpost setup`. 
 | `Channel.ReadBasic.All` | User or Admin* | `teams channels` — list channels in a team |
 | `ChannelMessage.Read.All` | Admin | `teams messages` — read channel messages |
 | `ChannelMessage.Send` | User | `teams send` — send channel messages |
+| `Chat.Read` | User | `teams chats`, `teams chat-messages` — list chats and read chat messages |
+| `ChatMessage.Send` | User | `teams chat-send` — send messages to chats |
 | `Files.Read.All` | User or Admin* | `teams files`, `teams download` — browse and download SharePoint files |
 
 \* *Some organizations restrict these scopes to admin consent only. If you encounter a "needs admin approval" error, ask your IT administrator to consent on your behalf, or disable Teams in outpost.*
@@ -101,13 +103,16 @@ Your choice is saved in the config file (`enabled_features` array). You can re-r
 | `teams send` | `ChannelMessage.Send` |
 | `teams files` | `Files.Read.All`, `Channel.ReadBasic.All` |
 | `teams download` | `Files.Read.All` |
+| `teams chats` | `Chat.Read` |
+| `teams chat-messages` | `Chat.Read` |
+| `teams chat-send` | `ChatMessage.Send` |
 | `teams upload` | `Files.Read.All`* |
 
 \* *Upload currently uses `Files.Read.All` which permits reading. For write operations, your organization's SharePoint permissions determine actual access. A future version may add `Files.ReadWrite.All` for explicit write consent.*
 
 ## MCP Tools
 
-MCP tools use the same scopes as their CLI counterparts. Teams MCP tools (`teams_list`, `teams_channels`, etc.) are feature-gated — they return a clear error message if Teams is not enabled in the config.
+MCP tools use the same scopes as their CLI counterparts. Teams MCP tools (`teams_list`, `teams_channels`, `teams_chats`, etc.) are feature-gated — they return a clear error message if Teams is not enabled in the config.
 
 The MCP workspace tools (`teams_workspace_list`, `teams_workspace_read`, `teams_workspace_write`) operate on the local transient workspace directory and do not require any Graph API scopes.
 

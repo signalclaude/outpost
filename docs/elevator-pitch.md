@@ -1,0 +1,5 @@
+# Outpost — Elevator Pitch
+
+I built **outpost**, an open-source CLI for Microsoft Outlook and Teams powered by the Microsoft Graph API. Tasks, calendar, email, contacts, and Teams — all from the terminal. It uses `outpost cal today` instead of alt-tabbing to Outlook, `outpost mail list --unread` instead of drowning in your inbox, and `outpost task add "Ship the thing" --due tomorrow` instead of clicking through the To Do UI. It supports natural language dates, rich table output, multi-account profiles, and full CRUD on everything.
+
+The real kicker: outpost doubles as an MCP server for Claude Desktop. That means Claude can read your calendar, triage your inbox, manage your tasks, and even download/edit/re-upload Teams files — all through natural conversation. No browser, no copy-paste, just "what's on my calendar today?" and Claude handles the rest. It's open source, works with any Azure AD tenant, and optional scopes mean you only grant the permissions you actually need. Check it out: https://github.com/signalclaude/outpost

@@ -2,6 +2,7 @@
 
 import json
 import platform
+import secrets
 import shutil
 import tempfile
 from pathlib import Path
@@ -31,6 +32,8 @@ FEATURE_SCOPES = {
         "ChannelMessage.Read.All",
         "ChannelMessage.Send",
         "Files.Read.All",
+        "Chat.Read",
+        "ChatMessage.Send",
     ],
 }
 
@@ -139,3 +142,24 @@ def clean_workspace() -> None:
     if workspace.exists():
         shutil.rmtree(workspace)
         workspace.mkdir(parents=True, exist_ok=True)
+
+
+def get_mcp_api_key(config: dict | None = None) -> str:
+    """Get the MCP API key, generating one if it doesn't exist."""
+    if config is None:
+        config = load_config()
+    key = config.get("mcp_api_key")
+    if not key:
+        key = generate_mcp_api_key()
+        config["mcp_api_key"] = key
+        save_config(config)
+    return key
+
+
+def generate_mcp_api_key() -> str:
+    """Generate a new secure API key and save it to config."""
+    key = secrets.token_urlsafe(32)
+    config = load_config()
+    config["mcp_api_key"] = key
+    save_config(config)
+    return key

@@ -2,6 +2,29 @@
 
 All notable changes to Outpost are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.2] — Unreleased
+
+### Added
+- `outpost --version` / `-V` flag to display current version
+- `outpost update` command — check for new releases and self-update from GitHub
+  - `--check` flag to only check without installing
+  - `--force` flag to bypass 24h cache and check GitHub now
+  - Auto-check notice on stderr when a newer version is available (interactive terminals only)
+- `__version__` now reads from `importlib.metadata` (single source of truth: `pyproject.toml`)
+- Remote MCP access via SSE or streamable-http transport with bearer token auth (#5)
+  - `--host` flag on `outpost mcp serve` (use `0.0.0.0` for LAN access)
+  - API key auto-generated on first use, stored in config
+  - Bearer token enforced on all network transport requests
+  - `outpost mcp key` — display current API key
+  - `outpost mcp key --regenerate` — rotate the API key
+  - `streamable-http` transport option (newer MCP spec)
+- Teams 1:1 and group chat support (#4)
+  - `outpost teams chats` — list recent chats (1:1, group, meeting)
+  - `outpost teams chat-messages <id>` — read messages from a chat
+  - `outpost teams chat-send <id> --body "..."` — send a message to a chat
+  - 3 new MCP tools: `teams_chats`, `teams_chat_messages`, `teams_chat_send` (39 tools total)
+  - New scopes: `Chat.Read`, `ChatMessage.Send` (re-run `outpost setup` to consent)
+
 ## [0.1.1] — Unreleased
 
 ### Added

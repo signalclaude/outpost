@@ -40,6 +40,25 @@ SAMPLE_MESSAGES = [
     },
 ]
 
+SAMPLE_CHATS = [
+    {
+        "id": "chat-1",
+        "chatType": "oneOnOne",
+        "topic": None,
+        "members": [
+            {"displayName": "Alice"},
+            {"displayName": "Bob"},
+        ],
+        "lastMessagePreview": {"createdDateTime": "2026-03-01T10:00:00Z"},
+    },
+    {
+        "id": "chat-2",
+        "chatType": "group",
+        "topic": "Project X",
+        "members": [],
+    },
+]
+
 SAMPLE_FILES = [
     {"id": "file-1", "name": "doc.pdf", "size": 1024, "lastModifiedDateTime": "2026-03-01T10:00:00Z"},
     {"id": "folder-2", "name": "subfolder", "folder": {"childCount": 3}, "lastModifiedDateTime": "2026-03-01T10:00:00Z"},
@@ -250,6 +269,99 @@ class TestTeamsUpload:
     def test_upload_not_enabled(self):
         with patch("outpost.config.is_feature_enabled", side_effect=_mock_feature_disabled):
             result = runner.invoke(app, ["teams", "upload", "drive-1", "folder-1", "file.txt"])
+
+        assert result.exit_code == 1
+        assert "not enabled" in result.output
+
+
+class TestTeamsChats:
+    def test_chats_table(self):
+        mock_client = MagicMock()
+
+        with patch("outpost.cli._get_client", return_value=mock_client), \
+             patch("outpost.config.is_feature_enabled", side_effect=_mock_feature_enabled), \
+             patch("outpost.api.teams.list_chats", return_value=SAMPLE_CHATS):
+            result = runner.invoke(app, ["teams", "chats"])
+
+        assert result.exit_code == 0
+        assert "oneOnOne" in result.output
+
+    def test_chats_json(self):
+        mock_client = MagicMock()
+
+        with patch("outpost.cli._get_client", return_value=mock_client), \
+             patch("outpost.config.is_feature_enabled", side_effect=_mock_feature_enabled), \
+             patch("outpost.api.teams.list_chats", return_value=SAMPLE_CHATS):
+            result = runner.invoke(app, ["teams", "chats", "--output", "json"])
+
+        assert result.exit_code == 0
+        parsed = json.loads(result.output)
+        assert len(parsed) == 2
+
+    def test_chats_not_enabled(self):
+        with patch("outpost.config.is_feature_enabled", side_effect=_mock_feature_disabled):
+            result = runner.invoke(app, ["teams", "chats"])
+
+        assert result.exit_code == 1
+        assert "not enabled" in result.output
+
+
+class TestTeamsChatMessages:
+    def test_chat_messages_table(self):
+        mock_client = MagicMock()
+
+        with patch("outpost.cli._get_client", return_value=mock_client), \
+             patch("outpost.config.is_feature_enabled", side_effect=_mock_feature_enabled), \
+             patch("outpost.api.teams.list_chat_messages", return_value=SAMPLE_MESSAGES):
+            result = runner.invoke(app, ["teams", "chat-messages", "chat-1"])
+
+        assert result.exit_code == 0
+
+    def test_chat_messages_json(self):
+        mock_client = MagicMock()
+
+        with patch("outpost.cli._get_client", return_value=mock_client), \
+             patch("outpost.config.is_feature_enabled", side_effect=_mock_feature_enabled), \
+             patch("outpost.api.teams.list_chat_messages", return_value=SAMPLE_MESSAGES):
+            result = runner.invoke(app, ["teams", "chat-messages", "chat-1", "--output", "json"])
+
+        assert result.exit_code == 0
+        parsed = json.loads(result.output)
+        assert len(parsed) == 1
+
+    def test_chat_messages_not_enabled(self):
+        with patch("outpost.config.is_feature_enabled", side_effect=_mock_feature_disabled):
+            result = runner.invoke(app, ["teams", "chat-messages", "chat-1"])
+
+        assert result.exit_code == 1
+
+
+class TestTeamsChatSend:
+    def test_chat_send(self):
+        mock_client = MagicMock()
+
+        with patch("outpost.cli._get_client", return_value=mock_client), \
+             patch("outpost.config.is_feature_enabled", side_effect=_mock_feature_enabled), \
+             patch("outpost.api.teams.send_chat_message", return_value={"id": "msg-new", "body": {"content": "Hi!"}}):
+            result = runner.invoke(app, ["teams", "chat-send", "chat-1", "--body", "Hi!"])
+
+        assert result.exit_code == 0
+
+    def test_chat_send_json(self):
+        mock_client = MagicMock()
+
+        with patch("outpost.cli._get_client", return_value=mock_client), \
+             patch("outpost.config.is_feature_enabled", side_effect=_mock_feature_enabled), \
+             patch("outpost.api.teams.send_chat_message", return_value={"id": "msg-new", "body": {"content": "Hi!"}}):
+            result = runner.invoke(app, ["teams", "chat-send", "chat-1", "--body", "Hi!", "--output", "json"])
+
+        assert result.exit_code == 0
+        parsed = json.loads(result.output)
+        assert parsed["id"] == "msg-new"
+
+    def test_chat_send_not_enabled(self):
+        with patch("outpost.config.is_feature_enabled", side_effect=_mock_feature_disabled):
+            result = runner.invoke(app, ["teams", "chat-send", "chat-1", "--body", "Hi!"])
 
         assert result.exit_code == 1
         assert "not enabled" in result.output

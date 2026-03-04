@@ -21,6 +21,23 @@ mcp = FastMCP(
     instructions="Manage Microsoft Outlook tasks, calendar, email, contacts, and Teams via Graph API.",
 )
 
+
+def create_mcp_server(auth=None):
+    """Create a new FastMCP server instance, optionally with auth.
+
+    For stdio transport, returns the module-level `mcp` (no auth needed).
+    For network transports (SSE, streamable-http), pass an auth provider.
+    """
+    if auth is None:
+        return mcp
+    server = FastMCP(
+        "outpost",
+        instructions="Manage Microsoft Outlook tasks, calendar, email, contacts, and Teams via Graph API.",
+        auth=auth,
+    )
+    server.mount(mcp)
+    return server
+
 # Clean workspace on MCP server startup
 clean_workspace()
 
@@ -516,6 +533,50 @@ def teams_files(team_id: str, channel_id: str) -> list[dict]:
     drive_id = folder["parentReference"]["driveId"]
     item_id = folder["id"]
     return list_files(client, drive_id, item_id)
+
+
+@mcp.tool()
+def teams_chats(top: int = 25) -> list[dict]:
+    """List your recent Teams chats (1:1, group, and meeting). Requires the Teams feature.
+
+    Args:
+        top: Maximum number of chats to return
+    """
+    _require_teams()
+    from outpost.api.teams import list_chats
+
+    client = _get_client()
+    return list_chats(client, top=top)
+
+
+@mcp.tool()
+def teams_chat_messages(chat_id: str, top: int = 25) -> list[dict]:
+    """Read messages from a Teams chat (1:1 or group).
+
+    Args:
+        chat_id: Chat ID (from teams_chats)
+        top: Maximum number of messages to return
+    """
+    _require_teams()
+    from outpost.api.teams import list_chat_messages
+
+    client = _get_client()
+    return list_chat_messages(client, chat_id, top=top)
+
+
+@mcp.tool()
+def teams_chat_send(chat_id: str, body: str) -> dict:
+    """Send a message to a Teams chat (1:1 or group).
+
+    Args:
+        chat_id: Chat ID (from teams_chats)
+        body: Message content
+    """
+    _require_teams()
+    from outpost.api.teams import send_chat_message
+
+    client = _get_client()
+    return send_chat_message(client, chat_id, body)
 
 
 @mcp.tool()

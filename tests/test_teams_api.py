@@ -15,6 +15,9 @@ from outpost.api.teams import (
     list_files,
     download_file,
     upload_file,
+    list_chats,
+    list_chat_messages,
+    send_chat_message,
 )
 from outpost.api.client import GraphClient
 
@@ -173,6 +176,94 @@ class TestDownloadFile:
             client = GraphClient(token="fake")
             with pytest.raises(ValueError, match="No download URL"):
                 download_file(client, "drive-1", "file-1")
+
+
+class TestListChats:
+    def test_returns_chats(self):
+        with respx.mock(base_url=GRAPH_BASE) as router:
+            route = router.get("/me/chats").mock(
+                return_value=httpx.Response(200, json={
+                    "value": [
+                        {
+                            "id": "chat-1",
+                            "chatType": "oneOnOne",
+                            "topic": None,
+                            "members": [
+                                {"displayName": "Alice"},
+                                {"displayName": "Bob"},
+                            ],
+                            "lastMessagePreview": {
+                                "createdDateTime": "2026-03-01T10:00:00Z",
+                            },
+                        },
+                        {
+                            "id": "chat-2",
+                            "chatType": "group",
+                            "topic": "Project X",
+                            "members": [],
+                        },
+                    ]
+                })
+            )
+            client = GraphClient(token="fake")
+            chats = list_chats(client, top=10)
+        assert len(chats) == 2
+        assert chats[0]["chatType"] == "oneOnOne"
+        assert route.called
+
+    def test_empty_chats(self):
+        with respx.mock(base_url=GRAPH_BASE) as router:
+            router.get("/me/chats").mock(
+                return_value=httpx.Response(200, json={"value": []})
+            )
+            client = GraphClient(token="fake")
+            chats = list_chats(client)
+        assert chats == []
+
+
+class TestListChatMessages:
+    def test_returns_messages(self):
+        with respx.mock(base_url=GRAPH_BASE) as router:
+            route = router.get("/me/chats/chat-1/messages").mock(
+                return_value=httpx.Response(200, json={
+                    "value": [
+                        {
+                            "id": "msg-1",
+                            "body": {"content": "Hey!"},
+                            "from": {"user": {"displayName": "Alice"}},
+                            "createdDateTime": "2026-03-01T10:00:00Z",
+                        },
+                    ]
+                })
+            )
+            client = GraphClient(token="fake")
+            messages = list_chat_messages(client, "chat-1", top=10)
+        assert len(messages) == 1
+        assert messages[0]["body"]["content"] == "Hey!"
+        assert route.called
+
+    def test_empty_messages(self):
+        with respx.mock(base_url=GRAPH_BASE) as router:
+            router.get("/me/chats/chat-1/messages").mock(
+                return_value=httpx.Response(200, json={"value": []})
+            )
+            client = GraphClient(token="fake")
+            messages = list_chat_messages(client, "chat-1")
+        assert messages == []
+
+
+class TestSendChatMessage:
+    def test_sends_message(self):
+        with respx.mock(base_url=GRAPH_BASE) as router:
+            router.post("/chats/chat-1/messages").mock(
+                return_value=httpx.Response(201, json={
+                    "id": "msg-new",
+                    "body": {"content": "Hello!"},
+                })
+            )
+            client = GraphClient(token="fake")
+            result = send_chat_message(client, "chat-1", "Hello!")
+        assert result["id"] == "msg-new"
 
 
 class TestUploadFile:

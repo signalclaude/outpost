@@ -109,6 +109,57 @@ def download_file(
     return filename, response.content
 
 
+def list_chats(client: GraphClient, top: int = 25) -> list[dict]:
+    """List the current user's recent chats (1:1, group, and meeting).
+
+    Args:
+        client: GraphClient instance
+        top: Maximum number of chats to return
+    """
+    params = {
+        "$top": str(top),
+        "$orderby": "lastMessagePreview/createdDateTime desc",
+        "$expand": "members",
+    }
+    result = client.get("/me/chats", params=params)
+    return result.get("value", [])
+
+
+def list_chat_messages(
+    client: GraphClient,
+    chat_id: str,
+    top: int = 25,
+) -> list[dict]:
+    """List messages in a chat.
+
+    Args:
+        client: GraphClient instance
+        chat_id: Chat ID
+        top: Maximum number of messages to return
+    """
+    params = {"$top": str(top)}
+    result = client.get(f"/me/chats/{chat_id}/messages", params=params)
+    return result.get("value", [])
+
+
+def send_chat_message(
+    client: GraphClient,
+    chat_id: str,
+    content: str,
+) -> dict:
+    """Send a message to a chat.
+
+    Args:
+        client: GraphClient instance
+        chat_id: Chat ID
+        content: Message content (HTML supported)
+    """
+    return client.post(
+        f"/chats/{chat_id}/messages",
+        json={"body": {"content": content}},
+    )
+
+
 def upload_file(
     client: GraphClient,
     drive_id: str,

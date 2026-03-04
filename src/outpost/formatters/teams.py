@@ -62,6 +62,43 @@ def print_messages_table(messages: list[dict], console: Console | None = None, f
     console.print(table)
 
 
+def print_chats_table(chats: list[dict], console: Console | None = None, full_id: bool = False) -> None:
+    """Print a list of chats as a rich table."""
+    console = console or Console()
+    table = Table(title="Chats")
+    table.add_column("ID", style="dim", no_wrap=True)
+    table.add_column("Type", style="bold")
+    table.add_column("Topic / Members")
+    table.add_column("Last Updated")
+
+    for chat in chats:
+        chat_id = chat.get("id", "") if full_id else chat.get("id", "")[:8]
+        chat_type = chat.get("chatType", "")
+        topic = chat.get("topic", "") or ""
+
+        if topic:
+            display = topic
+        else:
+            # Show member names from expanded members
+            members = chat.get("members", [])
+            names = [
+                m.get("displayName", "")
+                for m in members
+                if m.get("displayName")
+            ]
+            display = ", ".join(names[:4])
+            if len(names) > 4:
+                display += f" +{len(names) - 4}"
+
+        last_updated = ""
+        if preview := chat.get("lastMessagePreview"):
+            last_updated = preview.get("createdDateTime", "")[:16]
+
+        table.add_row(chat_id, chat_type, display[:60], last_updated)
+
+    console.print(table)
+
+
 def print_files_table(files: list[dict], console: Console | None = None) -> None:
     """Print a list of drive items (files/folders) as a rich table."""
     console = console or Console()

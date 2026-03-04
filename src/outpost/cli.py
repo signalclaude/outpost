@@ -40,15 +40,40 @@ stderr = Console(stderr=True)
 # ── Global callback for --profile ─────────────────────────────────────────────
 
 
+def _version_callback(value: bool):
+    if value:
+        from outpost import __version__
+
+        typer.echo(f"outpost {__version__}")
+        raise typer.Exit()
+
+
 @app.callback()
 def main_callback(
     profile: Optional[str] = typer.Option(None, "--profile", help="Use a named profile for multi-account support"),
+    version: Optional[bool] = typer.Option(None, "--version", "-V", callback=_version_callback, is_eager=True, help="Show version and exit"),
 ):
     """Outpost CLI — Microsoft Outlook from the terminal."""
     if profile:
         from outpost.config import set_profile
 
         set_profile(profile)
+
+    # Auto-check for updates (only in interactive terminals, never breaks usage)
+    try:
+        if sys.stderr.isatty():
+            from outpost.updater import check_for_update
+            from outpost import __version__
+
+            update_info = check_for_update()
+            if update_info:
+                typer.echo(
+                    f"Update available: {__version__} \u2192 {update_info['latest_version']}. "
+                    f"Run 'outpost update' to upgrade.",
+                    err=True,
+                )
+    except Exception:
+        pass
 
 
 def _handle_error(exc: Exception) -> None:
@@ -841,6 +866,102 @@ def teams_upload_cmd(
         stderr.print(f"[green]Uploaded:[/green] {path.name} ({len(content)} bytes)")
 
 
+@teams_app.command("chats")
+@handle_errors
+def teams_chats_cmd(
+    top: int = typer.Option(25, "--top", "-n", help="Number of chats to show"),
+    full_id: bool = typer.Option(False, "--full-id", help="Show full IDs"),
+    output: str = typer.Option("table", "--output", "-o", help="Output format: table|json"),
+):
+    """List your recent Teams chats (1:1, group, and meeting)."""
+    from outpost.config import is_feature_enabled
+
+    if not is_feature_enabled("teams"):
+        typer.echo(
+            "Error: The 'teams' feature is not enabled. "
+            "Run 'outpost setup' and enable it to use this command.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    from outpost.api.teams import list_chats
+    from outpost.formatters.teams import print_chats_table
+    from outpost.formatters.json_fmt import print_json
+
+    client = _get_client()
+    chats = list_chats(client, top=top)
+
+    fmt = OutputFormat(output)
+    if fmt == OutputFormat.json:
+        print_json(chats)
+    else:
+        print_chats_table(chats, full_id=full_id)
+
+
+@teams_app.command("chat-messages")
+@handle_errors
+def teams_chat_messages_cmd(
+    chat_id: str = typer.Argument(..., help="Chat ID"),
+    top: int = typer.Option(25, "--top", "-n", help="Number of messages"),
+    full_id: bool = typer.Option(False, "--full-id", help="Show full IDs"),
+    output: str = typer.Option("table", "--output", "-o", help="Output format: table|json"),
+):
+    """Read messages from a Teams chat."""
+    from outpost.config import is_feature_enabled
+
+    if not is_feature_enabled("teams"):
+        typer.echo(
+            "Error: The 'teams' feature is not enabled. "
+            "Run 'outpost setup' and enable it to use this command.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    from outpost.api.teams import list_chat_messages
+    from outpost.formatters.teams import print_messages_table
+    from outpost.formatters.json_fmt import print_json
+
+    client = _get_client()
+    messages = list_chat_messages(client, chat_id, top=top)
+
+    fmt = OutputFormat(output)
+    if fmt == OutputFormat.json:
+        print_json(messages)
+    else:
+        print_messages_table(messages, full_id=full_id)
+
+
+@teams_app.command("chat-send")
+@handle_errors
+def teams_chat_send_cmd(
+    chat_id: str = typer.Argument(..., help="Chat ID"),
+    body: str = typer.Option(..., "--body", "-b", help="Message content"),
+    output: str = typer.Option("table", "--output", "-o", help="Output format: table|json"),
+):
+    """Send a message to a Teams chat."""
+    from outpost.config import is_feature_enabled
+
+    if not is_feature_enabled("teams"):
+        typer.echo(
+            "Error: The 'teams' feature is not enabled. "
+            "Run 'outpost setup' and enable it to use this command.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    from outpost.api.teams import send_chat_message
+    from outpost.formatters.json_fmt import print_json
+
+    client = _get_client()
+    result = send_chat_message(client, chat_id, body)
+
+    fmt = OutputFormat(output)
+    if fmt == OutputFormat.json:
+        print_json(result)
+    else:
+        stderr.print(f"[green]Sent message to chat[/green]")
+
+
 # ── Auth commands ────────────────────────────────────────────────────────────
 
 
@@ -948,16 +1069,86 @@ def auth_status(
 
 @mcp_app.command("serve")
 def mcp_serve(
-    transport: str = typer.Option("stdio", "--transport", "-t", help="Transport: stdio|sse"),
-    port: int = typer.Option(8080, "--port", "-p", help="Port for SSE transport"),
+    transport: str = typer.Option("stdio", "--transport", "-t", help="Transport: stdio|sse|streamable-http"),
+    host: str = typer.Option("127.0.0.1", "--host", "-H", help="Host to bind (use 0.0.0.0 for LAN access)"),
+    port: int = typer.Option(8080, "--port", "-p", help="Port for network transports"),
 ):
     """Start the MCP server."""
-    from outpost.mcp_server import mcp
+    from outpost.mcp_server import mcp, create_mcp_server
 
-    if transport == "sse":
-        mcp.run(transport="sse", port=port)
+    if transport in ("sse", "streamable-http"):
+        from outpost.config import get_mcp_api_key
+
+        key = get_mcp_api_key()
+
+        from fastmcp.server.auth import StaticTokenVerifier
+
+        auth = StaticTokenVerifier(
+            tokens={key: {"client_id": "outpost-remote", "scopes": ["all"]}},
+        )
+        server = create_mcp_server(auth=auth)
+        stderr.print(f"Starting MCP server ({transport}) on {host}:{port}")
+        stderr.print(f"API key required — run [bold]outpost mcp key[/bold] to view")
+        server.run(transport=transport, host=host, port=port)
     else:
         mcp.run()
+
+
+@mcp_app.command("key")
+@handle_errors
+def mcp_key(
+    regenerate: bool = typer.Option(False, "--regenerate", help="Generate a new API key"),
+):
+    """Display or regenerate the MCP API key for remote access."""
+    from outpost.config import get_mcp_api_key, generate_mcp_api_key
+
+    if regenerate:
+        key = generate_mcp_api_key()
+        stderr.print(f"[green]New API key generated.[/green]")
+    else:
+        key = get_mcp_api_key()
+
+    stderr.print(f"\nAPI key: [bold]{key}[/bold]")
+    stderr.print(f"\nUse as Bearer token in the Authorization header.")
+    stderr.print(f"For Claude connectors, paste this key during connector setup.")
+
+
+# ── Update command ───────────────────────────────────────────────────────────
+
+
+@app.command()
+@handle_errors
+def update(
+    check: bool = typer.Option(False, "--check", help="Only check for updates, don't install"),
+    force: bool = typer.Option(False, "--force", help="Ignore cache, check GitHub now"),
+):
+    """Check for updates and self-update outpost."""
+    from outpost import __version__
+    from outpost.updater import check_for_update, perform_update
+
+    stderr.print(f"Current version: [bold]{__version__}[/bold]")
+
+    update_info = check_for_update(force=force)
+
+    if not update_info:
+        stderr.print("[green]You're up to date![/green]")
+        return
+
+    stderr.print(f"Latest version:  [bold]{update_info['latest_version']}[/bold]")
+
+    if check:
+        stderr.print(f"\nRun [bold]outpost update[/bold] to upgrade.")
+        return
+
+    stderr.print(f"\nInstalling update...")
+    success = perform_update(update_info["download_url"])
+
+    if success:
+        stderr.print(f"[green]Updated to {update_info['latest_version']}![/green]")
+    else:
+        stderr.print("[red]Update failed.[/red] Try manually:")
+        stderr.print(f"  pip install --upgrade {update_info['download_url']}")
+        raise typer.Exit(1)
 
 
 # ── Entry point with error handling ──────────────────────────────────────────
