@@ -4,7 +4,7 @@ from rich.console import Console
 from rich.table import Table
 
 
-def print_tasks_table(tasks: list[dict], console: Console | None = None) -> None:
+def print_tasks_table(tasks: list[dict], console: Console | None = None, full_id: bool = False) -> None:
     """Print a list of tasks as a rich table."""
     console = console or Console()
     table = Table(title="Tasks")
@@ -15,7 +15,7 @@ def print_tasks_table(tasks: list[dict], console: Console | None = None) -> None
     table.add_column("Status")
 
     for t in tasks:
-        task_id = t.get("id", "")[:8]
+        task_id = t.get("id", "") if full_id else t.get("id", "")[:8]
         title = t.get("title", "")
         due = ""
         if due_dt := t.get("dueDateTime"):
@@ -33,10 +33,12 @@ def print_tasks_table(tasks: list[dict], console: Console | None = None) -> None
     console.print(table)
 
 
-def print_events_table(events: list[dict], console: Console | None = None) -> None:
+def print_events_table(events: list[dict], console: Console | None = None, full_id: bool = False) -> None:
     """Print a list of calendar events as a rich table."""
     console = console or Console()
     table = Table(title="Events")
+    if full_id:
+        table.add_column("ID", style="dim", no_wrap=True)
     table.add_column("Time", no_wrap=True)
     table.add_column("Title", style="bold")
     table.add_column("Duration")
@@ -63,6 +65,27 @@ def print_events_table(events: list[dict], console: Console | None = None) -> No
             except (ValueError, TypeError):
                 pass
         location = e.get("location", {}).get("displayName", "")
-        table.add_row(start_str, title, duration, location)
+        row = []
+        if full_id:
+            row.append(e.get("id", ""))
+        row.extend([start_str, title, duration, location])
+        table.add_row(*row)
+
+    console.print(table)
+
+
+def print_task_lists_table(lists: list[dict], console: Console | None = None, full_id: bool = False) -> None:
+    """Print task lists as a rich table."""
+    console = console or Console()
+    table = Table(title="Task Lists")
+    table.add_column("ID", style="dim", no_wrap=True)
+    table.add_column("Name", style="bold")
+    table.add_column("Type")
+
+    for lst in lists:
+        list_id = lst.get("id", "") if full_id else lst.get("id", "")[:8]
+        name = lst.get("displayName", "")
+        list_type = "Default" if lst.get("wellknownListName") == "defaultList" else ""
+        table.add_row(list_id, name, list_type)
 
     console.print(table)

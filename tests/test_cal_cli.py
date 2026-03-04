@@ -69,7 +69,7 @@ class TestCalAdd:
 class TestCalToday:
     def test_today_table(self):
         mock_client = MagicMock()
-        mock_client.get.return_value = SAMPLE_EVENTS
+        mock_client.get_all_pages.return_value = SAMPLE_EVENTS["value"]
 
         with patch("outpost.cli._get_client", return_value=mock_client):
             result = runner.invoke(app, ["cal", "today"])
@@ -79,7 +79,7 @@ class TestCalToday:
 
     def test_today_json(self):
         mock_client = MagicMock()
-        mock_client.get.return_value = SAMPLE_EVENTS
+        mock_client.get_all_pages.return_value = SAMPLE_EVENTS["value"]
 
         with patch("outpost.cli._get_client", return_value=mock_client):
             result = runner.invoke(app, ["cal", "today", "--output", "json"])
@@ -92,7 +92,7 @@ class TestCalToday:
 class TestCalList:
     def test_list_week(self):
         mock_client = MagicMock()
-        mock_client.get.return_value = SAMPLE_EVENTS
+        mock_client.get_all_pages.return_value = SAMPLE_EVENTS["value"]
 
         with patch("outpost.cli._get_client", return_value=mock_client):
             result = runner.invoke(app, ["cal", "list", "--week"])
@@ -101,7 +101,7 @@ class TestCalList:
 
     def test_list_specific_date(self):
         mock_client = MagicMock()
-        mock_client.get.return_value = SAMPLE_EVENTS
+        mock_client.get_all_pages.return_value = SAMPLE_EVENTS["value"]
 
         with patch("outpost.cli._get_client", return_value=mock_client):
             result = runner.invoke(app, ["cal", "list", "--date", "2026-03-15"])
@@ -110,7 +110,7 @@ class TestCalList:
 
     def test_list_json(self):
         mock_client = MagicMock()
-        mock_client.get.return_value = SAMPLE_EVENTS
+        mock_client.get_all_pages.return_value = SAMPLE_EVENTS["value"]
 
         with patch("outpost.cli._get_client", return_value=mock_client):
             result = runner.invoke(app, ["cal", "list", "--output", "json"])
@@ -149,6 +149,52 @@ class TestCalDelete:
 
         with patch("outpost.cli._get_client", return_value=mock_client):
             result = runner.invoke(app, ["cal", "delete", "evt-1"])
+
+        assert result.exit_code == 0
+
+
+class TestCalNext:
+    def test_next_event(self):
+        mock_client = MagicMock()
+        mock_client.get.return_value = SAMPLE_EVENTS
+
+        with patch("outpost.cli._get_client", return_value=mock_client):
+            result = runner.invoke(app, ["cal", "next"])
+
+        assert result.exit_code == 0
+
+    def test_next_events_with_count(self):
+        mock_client = MagicMock()
+        mock_client.get.return_value = SAMPLE_EVENTS
+
+        with patch("outpost.cli._get_client", return_value=mock_client):
+            result = runner.invoke(app, ["cal", "next", "--count", "3"])
+
+        assert result.exit_code == 0
+
+    def test_next_json(self):
+        mock_client = MagicMock()
+        mock_client.get.return_value = SAMPLE_EVENTS
+
+        with patch("outpost.cli._get_client", return_value=mock_client):
+            result = runner.invoke(app, ["cal", "next", "--output", "json"])
+
+        assert result.exit_code == 0
+        parsed = json.loads(result.output)
+        assert isinstance(parsed, list)
+
+
+class TestCalAddWithAttendee:
+    def test_add_with_attendee(self):
+        mock_client = MagicMock()
+        mock_client.post.return_value = {"id": "evt-1", "subject": "Meeting"}
+
+        with patch("outpost.cli._get_client", return_value=mock_client):
+            result = runner.invoke(app, [
+                "cal", "add", "Meeting",
+                "--start", "2026-03-15T09:00:00",
+                "--attendee", "alice@example.com",
+            ])
 
         assert result.exit_code == 0
 

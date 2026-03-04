@@ -23,16 +23,32 @@ auth_app = typer.Typer(help="Manage authentication.", no_args_is_help=True)
 
 mail_app = typer.Typer(help="Manage Outlook email.", no_args_is_help=True)
 contact_app = typer.Typer(help="Search Outlook contacts (read-only).", no_args_is_help=True)
+teams_app = typer.Typer(help="Manage Microsoft Teams channels and files.", no_args_is_help=True)
 mcp_app = typer.Typer(help="MCP server for Claude Desktop integration.", no_args_is_help=True)
 
 app.add_typer(task_app, name="task")
 app.add_typer(cal_app, name="cal")
 app.add_typer(mail_app, name="mail")
 app.add_typer(contact_app, name="contact")
+app.add_typer(teams_app, name="teams")
 app.add_typer(auth_app, name="auth")
 app.add_typer(mcp_app, name="mcp")
 
 stderr = Console(stderr=True)
+
+
+# ── Global callback for --profile ─────────────────────────────────────────────
+
+
+@app.callback()
+def main_callback(
+    profile: Optional[str] = typer.Option(None, "--profile", help="Use a named profile for multi-account support"),
+):
+    """Outpost CLI — Microsoft Outlook from the terminal."""
+    if profile:
+        from outpost.config import set_profile
+
+        set_profile(profile)
 
 
 def _handle_error(exc: Exception) -> None:
@@ -121,6 +137,7 @@ def task_add(
 def task_list(
     due: Optional[str] = typer.Option(None, "--due", "-d", help="Filter by due date (e.g. 'today', 'tomorrow')"),
     list_name: Optional[str] = typer.Option(None, "--list", "-l", help="Task list name"),
+    full_id: bool = typer.Option(False, "--full-id", help="Show full IDs instead of truncated"),
     output: str = typer.Option("table", "--output", "-o", help="Output format: table|json"),
 ):
     """List tasks from Microsoft To Do."""
@@ -140,7 +157,7 @@ def task_list(
     if fmt == OutputFormat.json:
         print_json(tasks)
     else:
-        print_tasks_table(tasks)
+        print_tasks_table(tasks, full_id=full_id)
 
 
 @task_app.command("update")
@@ -204,6 +221,60 @@ def task_delete_cmd(
     stderr.print(f"[green]Deleted task:[/green] {task_id}")
 
 
+@task_app.command("lists")
+@handle_errors
+def task_lists_cmd(
+    full_id: bool = typer.Option(False, "--full-id", help="Show full IDs"),
+    output: str = typer.Option("table", "--output", "-o", help="Output format: table|json"),
+):
+    """List all task lists."""
+    from outpost.api.tasks import get_task_lists
+    from outpost.formatters.table import print_task_lists_table
+    from outpost.formatters.json_fmt import print_json
+
+    client = _get_client()
+    lists = get_task_lists(client)
+
+    fmt = OutputFormat(output)
+    if fmt == OutputFormat.json:
+        print_json(lists)
+    else:
+        print_task_lists_table(lists, full_id=full_id)
+
+
+@task_app.command("lists-create")
+@handle_errors
+def task_lists_create_cmd(
+    name: str = typer.Argument(..., help="Name for the new task list"),
+    output: str = typer.Option("table", "--output", "-o", help="Output format: table|json"),
+):
+    """Create a new task list."""
+    from outpost.api.tasks import create_task_list
+    from outpost.formatters.json_fmt import print_json
+
+    client = _get_client()
+    result = create_task_list(client, name)
+
+    fmt = OutputFormat(output)
+    if fmt == OutputFormat.json:
+        print_json(result)
+    else:
+        stderr.print(f"[green]Created task list:[/green] {result.get('displayName', name)}")
+
+
+@task_app.command("lists-delete")
+@handle_errors
+def task_lists_delete_cmd(
+    list_id: str = typer.Argument(..., help="Task list ID to delete"),
+):
+    """Delete a task list."""
+    from outpost.api.tasks import delete_task_list
+
+    client = _get_client()
+    delete_task_list(client, list_id)
+    stderr.print(f"[green]Deleted task list:[/green] {list_id}")
+
+
 # ── Calendar commands ────────────────────────────────────────────────────────
 
 
@@ -214,6 +285,7 @@ def cal_add(
     start: str = typer.Option(..., "--start", "-s", help="Start time (e.g. 'tomorrow 9am')"),
     end: Optional[str] = typer.Option(None, "--end", "-e", help="End time"),
     duration: Optional[int] = typer.Option(None, "--duration", "-d", help="Duration in minutes"),
+    attendee: Optional[list[str]] = typer.Option(None, "--attendee", "-a", help="Attendee email (repeatable)"),
     output: str = typer.Option("table", "--output", "-o", help="Output format: table|json"),
 ):
     """Add a calendar event."""
@@ -225,7 +297,7 @@ def cal_add(
     start_dt = parse_natural_datetime(start)
     end_dt = parse_natural_datetime(end) if end else None
 
-    result = create_event(client, title, start_dt, end=end_dt, duration=duration)
+    result = create_event(client, title, start_dt, end=end_dt, duration=duration, attendees=attendee)
 
     fmt = OutputFormat(output)
     if fmt == OutputFormat.json:
@@ -237,6 +309,7 @@ def cal_add(
 @cal_app.command("today")
 @handle_errors
 def cal_today(
+    full_id: bool = typer.Option(False, "--full-id", help="Show full IDs"),
     output: str = typer.Option("table", "--output", "-o", help="Output format: table|json"),
 ):
     """Show today's calendar events."""
@@ -251,7 +324,7 @@ def cal_today(
     if fmt == OutputFormat.json:
         print_json(events)
     else:
-        print_events_table(events)
+        print_events_table(events, full_id=full_id)
 
 
 @cal_app.command("list")
@@ -259,6 +332,7 @@ def cal_today(
 def cal_list(
     date_str: Optional[str] = typer.Option(None, "--date", help="Show events for a specific date"),
     week: bool = typer.Option(False, "--week", "-w", help="Show this week's events"),
+    full_id: bool = typer.Option(False, "--full-id", help="Show full IDs"),
     output: str = typer.Option("table", "--output", "-o", help="Output format: table|json"),
 ):
     """List calendar events."""
@@ -286,7 +360,29 @@ def cal_list(
     if fmt == OutputFormat.json:
         print_json(events)
     else:
-        print_events_table(events)
+        print_events_table(events, full_id=full_id)
+
+
+@cal_app.command("next")
+@handle_errors
+def cal_next_cmd(
+    count: int = typer.Option(1, "--count", "-n", help="Number of upcoming events"),
+    full_id: bool = typer.Option(False, "--full-id", help="Show full IDs"),
+    output: str = typer.Option("table", "--output", "-o", help="Output format: table|json"),
+):
+    """Show the next upcoming calendar event(s)."""
+    from outpost.api.calendar import get_next_events
+    from outpost.formatters.table import print_events_table
+    from outpost.formatters.json_fmt import print_json
+
+    client = _get_client()
+    events = get_next_events(client, count=count)
+
+    fmt = OutputFormat(output)
+    if fmt == OutputFormat.json:
+        print_json(events)
+    else:
+        print_events_table(events, full_id=full_id)
 
 
 @cal_app.command("update")
@@ -296,6 +392,7 @@ def cal_update(
     title: Optional[str] = typer.Option(None, "--title", "-t", help="New title"),
     start: Optional[str] = typer.Option(None, "--start", "-s", help="New start time"),
     end: Optional[str] = typer.Option(None, "--end", "-e", help="New end time"),
+    attendee: Optional[list[str]] = typer.Option(None, "--attendee", "-a", help="Attendee email (repeatable)"),
     output: str = typer.Option("table", "--output", "-o", help="Output format: table|json"),
 ):
     """Update an existing calendar event."""
@@ -306,7 +403,7 @@ def cal_update(
     client = _get_client()
     start_dt = parse_natural_datetime(start) if start else None
     end_dt = parse_natural_datetime(end) if end else None
-    result = update_event(client, event_id, title=title, start=start_dt, end=end_dt)
+    result = update_event(client, event_id, title=title, start=start_dt, end=end_dt, attendees=attendee)
 
     fmt = OutputFormat(output)
     if fmt == OutputFormat.json:
@@ -336,6 +433,8 @@ def cal_delete(
 def mail_list_cmd(
     folder: str = typer.Option("inbox", "--folder", "-f", help="Mail folder (inbox, sentitems, drafts, deleteditems)"),
     top: int = typer.Option(25, "--top", "-n", help="Number of messages to show"),
+    unread: bool = typer.Option(False, "--unread", "-u", help="Show only unread messages"),
+    full_id: bool = typer.Option(False, "--full-id", help="Show full IDs"),
     output: str = typer.Option("table", "--output", "-o", help="Output format: table|json"),
 ):
     """List email messages."""
@@ -344,23 +443,24 @@ def mail_list_cmd(
     from outpost.formatters.json_fmt import print_json
 
     client = _get_client()
-    messages = list_messages(client, folder=folder, top=top)
+    messages = list_messages(client, folder=folder, top=top, unread=unread)
 
     fmt = OutputFormat(output)
     if fmt == OutputFormat.json:
         print_json(messages)
     else:
-        print_messages_table(messages)
+        print_messages_table(messages, full_id=full_id)
 
 
 @mail_app.command("read")
 @handle_errors
 def mail_read_cmd(
     message_id: str = typer.Argument(..., help="Message ID to read"),
+    download: bool = typer.Option(False, "--download", help="Download attachments to current directory"),
     output: str = typer.Option("table", "--output", "-o", help="Output format: table|json"),
 ):
     """Read a specific email message."""
-    from outpost.api.mail import get_message
+    from outpost.api.mail import get_message, list_attachments, download_attachment
     from outpost.formatters.mail import print_message_detail
     from outpost.formatters.json_fmt import print_json
 
@@ -373,6 +473,14 @@ def mail_read_cmd(
     else:
         print_message_detail(message)
 
+    if download and message.get("hasAttachments"):
+        attachments = list_attachments(client, message_id)
+        for att in attachments:
+            filename, content = download_attachment(client, message_id, att["id"])
+            with open(filename, "wb") as f:
+                f.write(content)
+            stderr.print(f"[green]Downloaded:[/green] {filename} ({len(content)} bytes)")
+
 
 @mail_app.command("send")
 @handle_errors
@@ -381,14 +489,19 @@ def mail_send_cmd(
     subject: str = typer.Option(..., "--subject", "-s", help="Email subject"),
     body: str = typer.Option(..., "--body", "-b", help="Email body text"),
     cc: Optional[str] = typer.Option(None, "--cc", help="CC recipients (comma-separated)"),
+    attach: Optional[list[str]] = typer.Option(None, "--attach", "-a", help="File to attach (repeatable)"),
 ):
     """Send an email."""
-    from outpost.api.mail import send_message
+    from outpost.api.mail import send_message, send_message_with_attachments
 
     client = _get_client()
     to_list = [addr.strip() for addr in to.split(",")]
     cc_list = [addr.strip() for addr in cc.split(",")] if cc else None
-    send_message(client, to_list, subject, body, cc=cc_list)
+
+    if attach:
+        send_message_with_attachments(client, to_list, subject, body, attach, cc=cc_list)
+    else:
+        send_message(client, to_list, subject, body, cc=cc_list)
     stderr.print(f"[green]Sent email:[/green] {subject}")
 
 
@@ -417,6 +530,29 @@ def mail_delete_cmd(
     client = _get_client()
     delete_message(client, message_id)
     stderr.print(f"[green]Deleted message:[/green] {message_id}")
+
+
+@mail_app.command("search")
+@handle_errors
+def mail_search_cmd(
+    query: str = typer.Argument(..., help="Search query"),
+    top: int = typer.Option(25, "--top", "-n", help="Number of results"),
+    full_id: bool = typer.Option(False, "--full-id", help="Show full IDs"),
+    output: str = typer.Option("table", "--output", "-o", help="Output format: table|json"),
+):
+    """Search email messages."""
+    from outpost.api.mail import search_messages
+    from outpost.formatters.mail import print_messages_table
+    from outpost.formatters.json_fmt import print_json
+
+    client = _get_client()
+    messages = search_messages(client, query, top=top)
+
+    fmt = OutputFormat(output)
+    if fmt == OutputFormat.json:
+        print_json(messages)
+    else:
+        print_messages_table(messages, full_id=full_id)
 
 
 # ── Contact commands ────────────────────────────────────────────────────────
@@ -465,7 +601,261 @@ def contact_search_cmd(
         print_contacts_table(contacts)
 
 
+# ── Teams commands ───────────────────────────────────────────────────────────
+
+
+@teams_app.command("list")
+@handle_errors
+def teams_list_cmd(
+    full_id: bool = typer.Option(False, "--full-id", help="Show full IDs"),
+    output: str = typer.Option("table", "--output", "-o", help="Output format: table|json"),
+):
+    """List your joined Microsoft Teams."""
+    from outpost.config import is_feature_enabled
+
+    if not is_feature_enabled("teams"):
+        typer.echo(
+            "Error: The 'teams' feature is not enabled. "
+            "Run 'outpost setup' and enable it to use this command.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    from outpost.api.teams import list_teams
+    from outpost.formatters.teams import print_teams_table
+    from outpost.formatters.json_fmt import print_json
+
+    client = _get_client()
+    teams = list_teams(client)
+
+    fmt = OutputFormat(output)
+    if fmt == OutputFormat.json:
+        print_json(teams)
+    else:
+        print_teams_table(teams, full_id=full_id)
+
+
+@teams_app.command("channels")
+@handle_errors
+def teams_channels_cmd(
+    team_id: str = typer.Argument(..., help="Team ID"),
+    full_id: bool = typer.Option(False, "--full-id", help="Show full IDs"),
+    output: str = typer.Option("table", "--output", "-o", help="Output format: table|json"),
+):
+    """List channels in a team."""
+    from outpost.config import is_feature_enabled
+
+    if not is_feature_enabled("teams"):
+        typer.echo(
+            "Error: The 'teams' feature is not enabled. "
+            "Run 'outpost setup' and enable it to use this command.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    from outpost.api.teams import list_channels
+    from outpost.formatters.teams import print_channels_table
+    from outpost.formatters.json_fmt import print_json
+
+    client = _get_client()
+    channels = list_channels(client, team_id)
+
+    fmt = OutputFormat(output)
+    if fmt == OutputFormat.json:
+        print_json(channels)
+    else:
+        print_channels_table(channels, full_id=full_id)
+
+
+@teams_app.command("messages")
+@handle_errors
+def teams_messages_cmd(
+    team_id: str = typer.Argument(..., help="Team ID"),
+    channel_id: str = typer.Argument(..., help="Channel ID"),
+    top: int = typer.Option(25, "--top", "-n", help="Number of messages"),
+    full_id: bool = typer.Option(False, "--full-id", help="Show full IDs"),
+    output: str = typer.Option("table", "--output", "-o", help="Output format: table|json"),
+):
+    """Read messages from a Teams channel."""
+    from outpost.config import is_feature_enabled
+
+    if not is_feature_enabled("teams"):
+        typer.echo(
+            "Error: The 'teams' feature is not enabled. "
+            "Run 'outpost setup' and enable it to use this command.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    from outpost.api.teams import list_messages
+    from outpost.formatters.teams import print_messages_table
+    from outpost.formatters.json_fmt import print_json
+
+    client = _get_client()
+    messages = list_messages(client, team_id, channel_id, top=top)
+
+    fmt = OutputFormat(output)
+    if fmt == OutputFormat.json:
+        print_json(messages)
+    else:
+        print_messages_table(messages, full_id=full_id)
+
+
+@teams_app.command("send")
+@handle_errors
+def teams_send_cmd(
+    team_id: str = typer.Argument(..., help="Team ID"),
+    channel_id: str = typer.Argument(..., help="Channel ID"),
+    body: str = typer.Option(..., "--body", "-b", help="Message content"),
+    output: str = typer.Option("table", "--output", "-o", help="Output format: table|json"),
+):
+    """Send a message to a Teams channel."""
+    from outpost.config import is_feature_enabled
+
+    if not is_feature_enabled("teams"):
+        typer.echo(
+            "Error: The 'teams' feature is not enabled. "
+            "Run 'outpost setup' and enable it to use this command.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    from outpost.api.teams import send_message
+    from outpost.formatters.json_fmt import print_json
+
+    client = _get_client()
+    result = send_message(client, team_id, channel_id, body)
+
+    fmt = OutputFormat(output)
+    if fmt == OutputFormat.json:
+        print_json(result)
+    else:
+        stderr.print(f"[green]Sent message to channel[/green]")
+
+
+@teams_app.command("files")
+@handle_errors
+def teams_files_cmd(
+    team_id: str = typer.Argument(..., help="Team ID"),
+    channel_id: str = typer.Argument(..., help="Channel ID"),
+    output: str = typer.Option("table", "--output", "-o", help="Output format: table|json"),
+):
+    """List files in a Teams channel's SharePoint folder."""
+    from outpost.config import is_feature_enabled
+
+    if not is_feature_enabled("teams"):
+        typer.echo(
+            "Error: The 'teams' feature is not enabled. "
+            "Run 'outpost setup' and enable it to use this command.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    from outpost.api.teams import get_channel_files_folder, list_files
+    from outpost.formatters.teams import print_files_table
+    from outpost.formatters.json_fmt import print_json
+
+    client = _get_client()
+    folder = get_channel_files_folder(client, team_id, channel_id)
+    drive_id = folder["parentReference"]["driveId"]
+    item_id = folder["id"]
+    files = list_files(client, drive_id, item_id)
+
+    fmt = OutputFormat(output)
+    if fmt == OutputFormat.json:
+        print_json(files)
+    else:
+        print_files_table(files)
+
+
+@teams_app.command("download")
+@handle_errors
+def teams_download_cmd(
+    drive_id: str = typer.Argument(..., help="Drive ID"),
+    item_id: str = typer.Argument(..., help="Item ID"),
+):
+    """Download a file from Teams/SharePoint."""
+    from outpost.config import is_feature_enabled
+
+    if not is_feature_enabled("teams"):
+        typer.echo(
+            "Error: The 'teams' feature is not enabled. "
+            "Run 'outpost setup' and enable it to use this command.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    from outpost.api.teams import download_file
+
+    client = _get_client()
+    filename, content = download_file(client, drive_id, item_id)
+    with open(filename, "wb") as f:
+        f.write(content)
+    stderr.print(f"[green]Downloaded:[/green] {filename} ({len(content)} bytes)")
+
+
+@teams_app.command("upload")
+@handle_errors
+def teams_upload_cmd(
+    drive_id: str = typer.Argument(..., help="Drive ID"),
+    parent_item_id: str = typer.Argument(..., help="Parent folder item ID"),
+    filepath: str = typer.Argument(..., help="Local file path to upload"),
+    output: str = typer.Option("table", "--output", "-o", help="Output format: table|json"),
+):
+    """Upload a local file to Teams/SharePoint."""
+    from pathlib import Path
+    from outpost.config import is_feature_enabled
+
+    if not is_feature_enabled("teams"):
+        typer.echo(
+            "Error: The 'teams' feature is not enabled. "
+            "Run 'outpost setup' and enable it to use this command.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    from outpost.api.teams import upload_file
+    from outpost.formatters.json_fmt import print_json
+
+    path = Path(filepath)
+    if not path.exists():
+        typer.echo(f"Error: File not found: {filepath}", err=True)
+        raise typer.Exit(1)
+
+    client = _get_client()
+    content = path.read_bytes()
+    result = upload_file(client, drive_id, parent_item_id, path.name, content)
+
+    fmt = OutputFormat(output)
+    if fmt == OutputFormat.json:
+        print_json(result)
+    else:
+        stderr.print(f"[green]Uploaded:[/green] {path.name} ({len(content)} bytes)")
+
+
 # ── Auth commands ────────────────────────────────────────────────────────────
+
+
+def require_feature(feature: str):
+    """Decorator that exits with a helpful error if a feature is not enabled."""
+
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            from outpost.config import is_feature_enabled
+
+            if not is_feature_enabled(feature):
+                typer.echo(
+                    f"Error: The '{feature}' feature is not enabled. "
+                    f"Run 'outpost setup' and enable it to use this command.",
+                    err=True,
+                )
+                raise typer.Exit(1)
+            return func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
 
 
 @app.command()
@@ -473,10 +863,44 @@ def contact_search_cmd(
 def setup():
     """Interactive first-time setup wizard."""
     from outpost.auth import login_interactive
+    from outpost.config import load_config, save_config, get_active_scopes
 
     stderr.print("[bold]Welcome to Outpost![/bold]")
     stderr.print("Let's connect your Microsoft account.\n")
-    login_interactive()
+
+    config = load_config()
+    enabled = list(config.get("enabled_features", []))
+
+    # Prompt for optional features
+    stderr.print("[bold]Optional features[/bold] (require additional permissions):")
+    stderr.print("  Microsoft Teams — read/send channel messages, browse channel files\n")
+
+    teams_current = "teams" in enabled
+    prompt = "Enable Teams access?"
+    if teams_current:
+        prompt += " (currently enabled) [Y/n]"
+    else:
+        prompt += " (your admin may need to approve) [y/N]"
+
+    answer = typer.prompt(prompt, default="y" if teams_current else "n")
+    if answer.lower().startswith("y"):
+        if "teams" not in enabled:
+            enabled.append("teams")
+    else:
+        if "teams" in enabled:
+            enabled.remove("teams")
+
+    config["enabled_features"] = enabled
+    save_config(config)
+
+    scopes = get_active_scopes(config)
+    success = login_interactive(scopes=scopes)
+
+    if success:
+        if "teams" in enabled:
+            stderr.print("[green]Teams access:[/green] enabled")
+        else:
+            stderr.print("[dim]Teams access:[/dim] disabled")
 
 
 @auth_app.command("status")

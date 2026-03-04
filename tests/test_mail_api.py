@@ -9,10 +9,14 @@ import respx
 from outpost.api.client import GraphClient
 from outpost.api.mail import (
     delete_message,
+    download_attachment,
     get_message,
+    list_attachments,
     list_messages,
     reply_message,
+    search_messages,
     send_message,
+    send_message_with_attachments,
 )
 
 
@@ -150,3 +154,103 @@ class TestDeleteMessage:
             result = delete_message(client, "msg-1")
         assert result == {}
         assert route.called
+
+
+class TestListMessagesUnread:
+    def test_unread_filter(self, client):
+        with respx.mock(base_url=GRAPH_BASE) as router:
+            route = router.get("/me/mailFolders/inbox/messages").mock(
+                return_value=httpx.Response(200, json={"value": []})
+            )
+            list_messages(client, unread=True)
+        request_url = str(route.calls[0].request.url)
+        assert "isRead" in request_url
+
+    def test_no_unread_filter_by_default(self, client):
+        with respx.mock(base_url=GRAPH_BASE) as router:
+            route = router.get("/me/mailFolders/inbox/messages").mock(
+                return_value=httpx.Response(200, json=SAMPLE_MESSAGES)
+            )
+            list_messages(client)
+        request_url = str(route.calls[0].request.url)
+        assert "filter" not in request_url.lower()
+
+
+class TestSearchMessages:
+    def test_search(self, client):
+        with respx.mock(base_url=GRAPH_BASE) as router:
+            route = router.get("/me/messages").mock(
+                return_value=httpx.Response(200, json={
+                    "value": [SAMPLE_MESSAGES["value"][0]]
+                })
+            )
+            result = search_messages(client, "Hello")
+        assert len(result) == 1
+        request = route.calls[0].request
+        assert request.headers["consistencylevel"] == "eventual"
+        assert "search" in str(request.url)
+
+    def test_search_with_top(self, client):
+        with respx.mock(base_url=GRAPH_BASE) as router:
+            route = router.get("/me/messages").mock(
+                return_value=httpx.Response(200, json={"value": []})
+            )
+            search_messages(client, "test", top=5)
+        request_url = str(route.calls[0].request.url)
+        assert "top=5" in request_url
+
+
+class TestListAttachments:
+    def test_list_attachments(self, client):
+        with respx.mock(base_url=GRAPH_BASE) as router:
+            router.get("/me/messages/msg-1/attachments").mock(
+                return_value=httpx.Response(200, json={
+                    "value": [
+                        {"id": "att-1", "name": "file.pdf", "contentType": "application/pdf", "size": 1024},
+                    ]
+                })
+            )
+            result = list_attachments(client, "msg-1")
+        assert len(result) == 1
+        assert result[0]["name"] == "file.pdf"
+
+
+class TestDownloadAttachment:
+    def test_download(self, client):
+        import base64
+        content = base64.b64encode(b"hello world").decode("ascii")
+        with respx.mock(base_url=GRAPH_BASE) as router:
+            router.get("/me/messages/msg-1/attachments/att-1").mock(
+                return_value=httpx.Response(200, json={
+                    "name": "test.txt",
+                    "contentBytes": content,
+                })
+            )
+            filename, data = download_attachment(client, "msg-1", "att-1")
+        assert filename == "test.txt"
+        assert data == b"hello world"
+
+
+class TestSendMessageWithAttachments:
+    def test_send_with_attachments(self, client, tmp_path):
+        # Create a temp file
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("hello")
+
+        with respx.mock(base_url=GRAPH_BASE) as router:
+            route = router.post("/me/sendMail").mock(
+                return_value=httpx.Response(202)
+            )
+            result = send_message_with_attachments(
+                client, ["bob@example.com"], "Test", "Hi", [str(test_file)]
+            )
+        assert result == {}
+        body = json.loads(route.calls[0].request.content)
+        assert len(body["message"]["attachments"]) == 1
+        assert body["message"]["attachments"][0]["name"] == "test.txt"
+
+    def test_send_missing_file_raises(self, client):
+        with pytest.raises(ValueError, match="not found"):
+            send_message_with_attachments(
+                client, ["bob@example.com"], "Test", "Hi", ["/nonexistent/file.txt"]
+            )

@@ -14,8 +14,7 @@ PRIORITY_MAP = {
 
 def get_task_lists(client: GraphClient) -> list[dict]:
     """Get all task lists for the current user."""
-    result = client.get("/me/todo/lists")
-    return result.get("value", [])
+    return client.get_all_pages("/me/todo/lists")
 
 
 def find_task_list_id(client: GraphClient, name: str | None = None) -> str:
@@ -101,8 +100,7 @@ def list_tasks(
             f"and dueDateTime/dateTime lt '{due_filter}T23:59:59'"
         )
 
-    result = client.get(f"/me/todo/lists/{list_id}/tasks", params=params or None)
-    return result.get("value", [])
+    return client.get_all_pages(f"/me/todo/lists/{list_id}/tasks", params=params or None)
 
 
 def update_task(
@@ -149,3 +147,13 @@ def delete_task(
     """Delete a task."""
     list_id = find_task_list_id(client, list_name)
     return client.delete(f"/me/todo/lists/{list_id}/tasks/{task_id}")
+
+
+def create_task_list(client: GraphClient, display_name: str) -> dict:
+    """Create a new task list."""
+    return client.post("/me/todo/lists", json={"displayName": display_name})
+
+
+def delete_task_list(client: GraphClient, list_id: str) -> dict:
+    """Delete a task list."""
+    return client.delete(f"/me/todo/lists/{list_id}")

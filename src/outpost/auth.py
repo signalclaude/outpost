@@ -5,11 +5,12 @@ import sys
 import msal
 from rich.console import Console
 
-from outpost.config import DEFAULT_CLIENT_ID, AUTHORITY, GRAPH_SCOPES, get_config_dir
+from outpost.config import DEFAULT_CLIENT_ID, AUTHORITY, get_active_scopes, get_config_dir, get_profile
 
 stderr = Console(stderr=True)
 
-_app_instance = None
+# Cache MSAL app instances per profile
+_app_instances: dict[str | None, msal.PublicClientApplication] = {}
 
 
 def _get_cache() -> msal.SerializableTokenCache:
@@ -52,21 +53,24 @@ def _get_cache() -> msal.SerializableTokenCache:
 
 
 def _get_msal_app() -> msal.PublicClientApplication | None:
-    """Get or create a cached MSAL PublicClientApplication."""
-    global _app_instance
+    """Get or create a cached MSAL PublicClientApplication for the current profile."""
     if not DEFAULT_CLIENT_ID:
         return None
-    if _app_instance is None:
-        _app_instance = msal.PublicClientApplication(
+    profile = get_profile()
+    if profile not in _app_instances:
+        _app_instances[profile] = msal.PublicClientApplication(
             DEFAULT_CLIENT_ID,
             authority=AUTHORITY,
             token_cache=_get_cache(),
         )
-    return _app_instance
+    return _app_instances[profile]
 
 
-def login_interactive() -> bool:
+def login_interactive(scopes: list[str] | None = None) -> bool:
     """Run the device code flow for interactive login.
+
+    Args:
+        scopes: OAuth scopes to request. Defaults to get_active_scopes().
 
     Returns True on success, False on failure.
     """
@@ -78,7 +82,9 @@ def login_interactive() -> bool:
         )
         return False
 
-    flow = app.initiate_device_flow(scopes=GRAPH_SCOPES)
+    if scopes is None:
+        scopes = get_active_scopes()
+    flow = app.initiate_device_flow(scopes=scopes)
     if "user_code" not in flow:
         stderr.print(f"[red]Failed to start device flow:[/red] {flow.get('error_description', 'unknown error')}")
         return False
@@ -106,7 +112,7 @@ def get_token() -> str | None:
     if not accounts:
         return None
 
-    result = app.acquire_token_silent(GRAPH_SCOPES, account=accounts[0])
+    result = app.acquire_token_silent(get_active_scopes(), account=accounts[0])
     if result and "access_token" in result:
         return result["access_token"]
     return None

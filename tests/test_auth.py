@@ -10,7 +10,7 @@ from outpost.auth import get_auth_status, get_token, login_interactive, require_
 class TestGetAuthStatus:
     def test_no_client_id(self):
         with patch("outpost.auth.DEFAULT_CLIENT_ID", ""), \
-             patch("outpost.auth._app_instance", None):
+             patch("outpost.auth._app_instances", {}):
             status = get_auth_status()
         assert status["logged_in"] is False
         assert status["username"] is None
@@ -90,3 +90,16 @@ class TestLoginInteractive:
         with patch("outpost.auth._get_msal_app", return_value=mock_app):
             result = login_interactive()
         assert result is False
+
+    def test_device_flow_custom_scopes(self):
+        mock_app = MagicMock()
+        mock_app.initiate_device_flow.return_value = {
+            "user_code": "ABC123",
+            "verification_uri": "https://microsoft.com/devicelogin",
+        }
+        mock_app.acquire_token_by_device_flow.return_value = {"access_token": "token"}
+        custom_scopes = ["User.Read", "Team.ReadBasic.All"]
+        with patch("outpost.auth._get_msal_app", return_value=mock_app):
+            result = login_interactive(scopes=custom_scopes)
+        assert result is True
+        mock_app.initiate_device_flow.assert_called_once_with(scopes=custom_scopes)

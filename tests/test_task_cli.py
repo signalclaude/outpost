@@ -34,7 +34,7 @@ def _patch_require_token():
 class TestTaskAdd:
     def test_add_basic_task(self):
         mock_client = MagicMock()
-        mock_client.get.return_value = SAMPLE_LISTS
+        mock_client.get_all_pages.return_value = [SAMPLE_LISTS["value"][0]]
         mock_client.post.return_value = {"id": "task-1", "title": "Buy milk"}
 
         with patch("outpost.cli._get_client", return_value=mock_client):
@@ -44,7 +44,7 @@ class TestTaskAdd:
 
     def test_add_task_with_due(self):
         mock_client = MagicMock()
-        mock_client.get.return_value = SAMPLE_LISTS
+        mock_client.get_all_pages.return_value = [SAMPLE_LISTS["value"][0]]
         mock_client.post.return_value = {"id": "task-1", "title": "Review PR"}
 
         with patch("outpost.cli._get_client", return_value=mock_client):
@@ -54,7 +54,7 @@ class TestTaskAdd:
 
     def test_add_task_with_priority(self):
         mock_client = MagicMock()
-        mock_client.get.return_value = SAMPLE_LISTS
+        mock_client.get_all_pages.return_value = [SAMPLE_LISTS["value"][0]]
         mock_client.post.return_value = {"id": "task-1", "title": "Urgent"}
 
         with patch("outpost.cli._get_client", return_value=mock_client):
@@ -64,7 +64,7 @@ class TestTaskAdd:
 
     def test_add_task_json_output(self):
         mock_client = MagicMock()
-        mock_client.get.return_value = SAMPLE_LISTS
+        mock_client.get_all_pages.return_value = [SAMPLE_LISTS["value"][0]]
         mock_client.post.return_value = {"id": "task-1", "title": "Test"}
 
         with patch("outpost.cli._get_client", return_value=mock_client):
@@ -78,9 +78,9 @@ class TestTaskAdd:
 class TestTaskList:
     def test_list_tasks_table(self):
         mock_client = MagicMock()
-        mock_client.get.side_effect = [
-            SAMPLE_LISTS,  # get_task_lists call
-            {"value": [{"id": "t1", "title": "Task 1", "status": "notStarted", "importance": "normal"}]},
+        mock_client.get_all_pages.side_effect = [
+            [SAMPLE_LISTS["value"][0]],  # get_task_lists
+            [{"id": "t1", "title": "Task 1", "status": "notStarted", "importance": "normal"}],
         ]
 
         with patch("outpost.cli._get_client", return_value=mock_client):
@@ -91,9 +91,9 @@ class TestTaskList:
 
     def test_list_tasks_json(self):
         mock_client = MagicMock()
-        mock_client.get.side_effect = [
-            SAMPLE_LISTS,
-            {"value": [{"id": "t1", "title": "Task 1"}]},
+        mock_client.get_all_pages.side_effect = [
+            [SAMPLE_LISTS["value"][0]],
+            [{"id": "t1", "title": "Task 1"}],
         ]
 
         with patch("outpost.cli._get_client", return_value=mock_client):
@@ -105,9 +105,9 @@ class TestTaskList:
 
     def test_list_tasks_with_due_filter(self):
         mock_client = MagicMock()
-        mock_client.get.side_effect = [
-            SAMPLE_LISTS,
-            {"value": []},
+        mock_client.get_all_pages.side_effect = [
+            [SAMPLE_LISTS["value"][0]],
+            [],
         ]
 
         with patch("outpost.cli._get_client", return_value=mock_client):
@@ -119,7 +119,7 @@ class TestTaskList:
 class TestTaskUpdate:
     def test_update_task_title(self):
         mock_client = MagicMock()
-        mock_client.get.return_value = SAMPLE_LISTS
+        mock_client.get_all_pages.return_value = [SAMPLE_LISTS["value"][0]]
         mock_client.patch.return_value = {"id": "task-1", "title": "New Title"}
 
         with patch("outpost.cli._get_client", return_value=mock_client):
@@ -129,7 +129,7 @@ class TestTaskUpdate:
 
     def test_update_task_json_output(self):
         mock_client = MagicMock()
-        mock_client.get.return_value = SAMPLE_LISTS
+        mock_client.get_all_pages.return_value = [SAMPLE_LISTS["value"][0]]
         mock_client.patch.return_value = {"id": "task-1", "title": "Updated"}
 
         with patch("outpost.cli._get_client", return_value=mock_client):
@@ -143,7 +143,7 @@ class TestTaskUpdate:
 class TestTaskComplete:
     def test_complete_task(self):
         mock_client = MagicMock()
-        mock_client.get.return_value = SAMPLE_LISTS
+        mock_client.get_all_pages.return_value = [SAMPLE_LISTS["value"][0]]
         mock_client.patch.return_value = {"id": "task-1", "title": "Done", "status": "completed"}
 
         with patch("outpost.cli._get_client", return_value=mock_client):
@@ -153,7 +153,7 @@ class TestTaskComplete:
 
     def test_complete_task_json(self):
         mock_client = MagicMock()
-        mock_client.get.return_value = SAMPLE_LISTS
+        mock_client.get_all_pages.return_value = [SAMPLE_LISTS["value"][0]]
         mock_client.patch.return_value = {"id": "task-1", "status": "completed"}
 
         with patch("outpost.cli._get_client", return_value=mock_client):
@@ -167,11 +167,61 @@ class TestTaskComplete:
 class TestTaskDelete:
     def test_delete_task(self):
         mock_client = MagicMock()
-        mock_client.get.return_value = SAMPLE_LISTS
+        mock_client.get_all_pages.return_value = [SAMPLE_LISTS["value"][0]]
         mock_client.delete.return_value = {}
 
         with patch("outpost.cli._get_client", return_value=mock_client):
             result = runner.invoke(app, ["task", "delete", "task-1"])
+
+        assert result.exit_code == 0
+
+
+class TestTaskLists:
+    def test_lists_table(self):
+        mock_client = MagicMock()
+        mock_client.get_all_pages.return_value = [
+            {"id": "list-1", "displayName": "Tasks", "wellknownListName": "defaultList"},
+            {"id": "list-2", "displayName": "Work", "wellknownListName": "none"},
+        ]
+
+        with patch("outpost.cli._get_client", return_value=mock_client):
+            result = runner.invoke(app, ["task", "lists"])
+
+        assert result.exit_code == 0
+        assert "Tasks" in result.output
+
+    def test_lists_json(self):
+        mock_client = MagicMock()
+        mock_client.get_all_pages.return_value = [
+            {"id": "list-1", "displayName": "Tasks", "wellknownListName": "defaultList"},
+        ]
+
+        with patch("outpost.cli._get_client", return_value=mock_client):
+            result = runner.invoke(app, ["task", "lists", "--output", "json"])
+
+        assert result.exit_code == 0
+        parsed = json.loads(result.output)
+        assert len(parsed) == 1
+
+
+class TestTaskListsCreate:
+    def test_create(self):
+        mock_client = MagicMock()
+        mock_client.post.return_value = {"id": "new-list", "displayName": "Shopping"}
+
+        with patch("outpost.cli._get_client", return_value=mock_client):
+            result = runner.invoke(app, ["task", "lists-create", "Shopping"])
+
+        assert result.exit_code == 0
+
+
+class TestTaskListsDelete:
+    def test_delete(self):
+        mock_client = MagicMock()
+        mock_client.delete.return_value = {}
+
+        with patch("outpost.cli._get_client", return_value=mock_client):
+            result = runner.invoke(app, ["task", "lists-delete", "list-1"])
 
         assert result.exit_code == 0
 

@@ -1,5 +1,7 @@
 """Tests for outpost Graph API client."""
 
+from unittest.mock import patch
+
 import httpx
 import pytest
 import respx
@@ -153,6 +155,127 @@ class TestGraphClient:
             request = route.calls[0].request
             assert request.headers["consistencylevel"] == "eventual"
 
+    def test_put_success(self):
+        with respx.mock(base_url=GRAPH_BASE) as router:
+            route = router.put("/drives/d1/items/i1:/test.txt:/content").mock(
+                return_value=httpx.Response(200, json={"id": "item-1", "name": "test.txt"})
+            )
+            client = GraphClient(token="fake")
+            result = client.put(
+                "/drives/d1/items/i1:/test.txt:/content",
+                content=b"hello world",
+            )
+        assert result["name"] == "test.txt"
+        assert route.called
+
+    def test_put_error(self):
+        with respx.mock(base_url=GRAPH_BASE) as router:
+            router.put("/drives/d1/items/bad:/test.txt:/content").mock(
+                return_value=httpx.Response(
+                    404, json={"error": {"code": "NotFound", "message": "Not found"}}
+                )
+            )
+            client = GraphClient(token="fake")
+            with pytest.raises(GraphAPIError) as exc_info:
+                client.put("/drives/d1/items/bad:/test.txt:/content", content=b"data")
+            assert exc_info.value.status_code == 404
+
     def test_context_manager(self):
         with GraphClient(token="fake") as client:
             assert client._token == "fake"
+
+
+class TestRetryOn429:
+    def test_retry_succeeds(self):
+        """429 on first try, 200 on retry."""
+        with respx.mock(base_url=GRAPH_BASE) as router:
+            route = router.get("/me").mock(
+                side_effect=[
+                    httpx.Response(429, headers={"Retry-After": "1"}),
+                    httpx.Response(200, json={"displayName": "Test"}),
+                ]
+            )
+            client = GraphClient(token="fake")
+            with patch("outpost.api.client.time.sleep") as mock_sleep:
+                result = client.get("/me")
+            assert result["displayName"] == "Test"
+            mock_sleep.assert_called_once_with(1)
+            assert route.call_count == 2
+
+    def test_retry_exhausted_raises(self):
+        """429 on all retries raises GraphAPIError."""
+        with respx.mock(base_url=GRAPH_BASE) as router:
+            router.get("/me").mock(
+                return_value=httpx.Response(
+                    429,
+                    headers={"Retry-After": "1"},
+                    json={"error": {"code": "TooManyRequests", "message": "Rate limited"}},
+                )
+            )
+            client = GraphClient(token="fake", max_retries=2)
+            with patch("outpost.api.client.time.sleep"):
+                with pytest.raises(GraphAPIError) as exc_info:
+                    client.get("/me")
+            assert exc_info.value.status_code == 429
+
+    def test_retry_uses_default_retry_after(self):
+        """Missing Retry-After header uses default."""
+        with respx.mock(base_url=GRAPH_BASE) as router:
+            router.get("/me").mock(
+                side_effect=[
+                    httpx.Response(429),
+                    httpx.Response(200, json={"ok": True}),
+                ]
+            )
+            client = GraphClient(token="fake")
+            with patch("outpost.api.client.time.sleep") as mock_sleep:
+                client.get("/me")
+            from outpost.api.client import DEFAULT_RETRY_AFTER
+            mock_sleep.assert_called_once_with(DEFAULT_RETRY_AFTER)
+
+
+class TestGetAllPages:
+    def test_single_page(self):
+        with respx.mock(base_url=GRAPH_BASE) as router:
+            router.get("/me/todo/lists").mock(
+                return_value=httpx.Response(200, json={"value": [{"id": "1"}, {"id": "2"}]})
+            )
+            client = GraphClient(token="fake")
+            result = client.get_all_pages("/me/todo/lists")
+        assert len(result) == 2
+
+    def test_multi_page(self):
+        next_url = f"{GRAPH_BASE}/me/todo/lists?$skip=1"
+        with respx.mock(base_url=GRAPH_BASE, assert_all_called=False) as router:
+            router.get("/me/todo/lists").mock(
+                side_effect=[
+                    httpx.Response(200, json={
+                        "value": [{"id": "1"}],
+                        "@odata.nextLink": next_url,
+                    }),
+                    httpx.Response(200, json={"value": [{"id": "2"}]}),
+                ]
+            )
+            client = GraphClient(token="fake")
+            result = client.get_all_pages("/me/todo/lists")
+        assert len(result) == 2
+
+    def test_max_pages_limit(self):
+        next_url = f"{GRAPH_BASE}/me/todo/lists?page=2"
+        with respx.mock(base_url=GRAPH_BASE, assert_all_called=False) as router:
+            router.get("/me/todo/lists").mock(
+                side_effect=[
+                    httpx.Response(200, json={
+                        "value": [{"id": "1"}],
+                        "@odata.nextLink": next_url,
+                    }),
+                    httpx.Response(200, json={
+                        "value": [{"id": "2"}],
+                        "@odata.nextLink": f"{GRAPH_BASE}/me/todo/lists?page=3",
+                    }),
+                ]
+            )
+            client = GraphClient(token="fake")
+            result = client.get_all_pages("/me/todo/lists", max_pages=2)
+        # Should stop after 2 pages even though there's a nextLink
+        assert len(result) == 2

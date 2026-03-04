@@ -15,7 +15,9 @@ runner = CliRunner()
 class TestErrorHandling:
     def test_401_error(self):
         mock_client = MagicMock()
-        mock_client.get.side_effect = GraphAPIError(401, "InvalidAuthenticationToken", "Token expired")
+        error = GraphAPIError(401, "InvalidAuthenticationToken", "Token expired")
+        mock_client.get.side_effect = error
+        mock_client.get_all_pages.side_effect = error
 
         with patch("outpost.cli._get_client", return_value=mock_client):
             result = runner.invoke(app, ["cal", "today"])
@@ -25,7 +27,9 @@ class TestErrorHandling:
 
     def test_403_error(self):
         mock_client = MagicMock()
-        mock_client.get.side_effect = GraphAPIError(403, "Forbidden", "Insufficient privileges")
+        error = GraphAPIError(403, "Forbidden", "Insufficient privileges")
+        mock_client.get.side_effect = error
+        mock_client.get_all_pages.side_effect = error
 
         with patch("outpost.cli._get_client", return_value=mock_client):
             result = runner.invoke(app, ["cal", "today"])
@@ -35,7 +39,9 @@ class TestErrorHandling:
 
     def test_429_error(self):
         mock_client = MagicMock()
-        mock_client.get.side_effect = GraphAPIError(429, "TooManyRequests", "Rate limited")
+        error = GraphAPIError(429, "TooManyRequests", "Rate limited")
+        mock_client.get.side_effect = error
+        mock_client.get_all_pages.side_effect = error
 
         with patch("outpost.cli._get_client", return_value=mock_client):
             result = runner.invoke(app, ["cal", "today"])
@@ -45,7 +51,9 @@ class TestErrorHandling:
 
     def test_500_error(self):
         mock_client = MagicMock()
-        mock_client.get.side_effect = GraphAPIError(500, "InternalServerError", "Something broke")
+        error = GraphAPIError(500, "InternalServerError", "Something broke")
+        mock_client.get.side_effect = error
+        mock_client.get_all_pages.side_effect = error
 
         with patch("outpost.cli._get_client", return_value=mock_client):
             result = runner.invoke(app, ["cal", "today"])
@@ -55,7 +63,9 @@ class TestErrorHandling:
 
     def test_network_error(self):
         mock_client = MagicMock()
-        mock_client.get.side_effect = httpx.ConnectError("Connection refused")
+        error = httpx.ConnectError("Connection refused")
+        mock_client.get.side_effect = error
+        mock_client.get_all_pages.side_effect = error
 
         with patch("outpost.cli._get_client", return_value=mock_client):
             result = runner.invoke(app, ["cal", "today"])

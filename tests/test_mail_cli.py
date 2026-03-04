@@ -143,3 +143,40 @@ class TestMailDelete:
             result = runner.invoke(app, ["mail", "delete", "msg-1"])
 
         assert result.exit_code == 0
+
+
+class TestMailListUnread:
+    def test_list_unread(self):
+        mock_client = MagicMock()
+        mock_client.get.return_value = {"value": []}
+
+        with patch("outpost.cli._get_client", return_value=mock_client):
+            result = runner.invoke(app, ["mail", "list", "--unread"])
+
+        assert result.exit_code == 0
+
+
+class TestMailSearch:
+    def test_search(self):
+        mock_client = MagicMock()
+        mock_client.get.return_value = {"value": [
+            {"id": "m1", "subject": "Budget", "from": {"emailAddress": {"address": "a@b.com"}},
+             "receivedDateTime": "2026-03-01T10:00:00Z", "isRead": True, "bodyPreview": "hi"}
+        ]}
+
+        with patch("outpost.cli._get_client", return_value=mock_client):
+            result = runner.invoke(app, ["mail", "search", "budget"])
+
+        assert result.exit_code == 0
+        assert "Budget" in result.output
+
+    def test_search_json(self):
+        mock_client = MagicMock()
+        mock_client.get.return_value = {"value": []}
+
+        with patch("outpost.cli._get_client", return_value=mock_client):
+            result = runner.invoke(app, ["mail", "search", "test", "--output", "json"])
+
+        assert result.exit_code == 0
+        parsed = json.loads(result.output)
+        assert parsed == []

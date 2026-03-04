@@ -6,7 +6,8 @@ import respx
 
 from outpost.api.client import GraphClient
 from outpost.api.tasks import (
-    add_task, complete_task, delete_task, find_task_list_id, get_task_lists, list_tasks, update_task,
+    add_task, complete_task, create_task_list, delete_task, delete_task_list,
+    find_task_list_id, get_task_lists, list_tasks, update_task,
 )
 
 
@@ -273,4 +274,26 @@ class TestDeleteTask:
                 return_value=httpx.Response(204)
             )
             delete_task(client, "task-1", list_name="Work")
+        assert route.called
+
+
+class TestCreateTaskList:
+    def test_create_list(self, client):
+        with respx.mock(base_url=GRAPH_BASE) as router:
+            route = router.post("/me/todo/lists").mock(
+                return_value=httpx.Response(201, json={"id": "new-list", "displayName": "Shopping"})
+            )
+            result = create_task_list(client, "Shopping")
+        assert result["displayName"] == "Shopping"
+        assert route.called
+
+
+class TestDeleteTaskList:
+    def test_delete_list(self, client):
+        with respx.mock(base_url=GRAPH_BASE) as router:
+            route = router.delete("/me/todo/lists/list-123").mock(
+                return_value=httpx.Response(204)
+            )
+            result = delete_task_list(client, "list-123")
+        assert result == {}
         assert route.called

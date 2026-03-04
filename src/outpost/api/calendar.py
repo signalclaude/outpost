@@ -15,6 +15,7 @@ def create_event(
     start: datetime,
     end: datetime | None = None,
     duration: int | None = None,
+    attendees: list[str] | None = None,
 ) -> dict:
     """Create a calendar event.
 
@@ -24,6 +25,7 @@ def create_event(
         start: Start datetime
         end: End datetime (optional if duration is given)
         duration: Duration in minutes (optional, default 30 if no end)
+        attendees: List of attendee email addresses (optional)
 
     Returns: Created event dict from Graph API
     """
@@ -31,11 +33,17 @@ def create_event(
         minutes = duration or DEFAULT_DURATION_MINUTES
         end = start + timedelta(minutes=minutes)
 
-    body = {
+    body: dict = {
         "subject": title,
         "start": to_graph_datetime(start),
         "end": to_graph_datetime(end),
     }
+
+    if attendees:
+        body["attendees"] = [
+            {"emailAddress": {"address": email}, "type": "required"}
+            for email in attendees
+        ]
 
     return client.post("/me/events", json=body)
 
@@ -45,22 +53,13 @@ def get_calendar_view(
     start_dt: datetime,
     end_dt: datetime,
 ) -> list[dict]:
-    """Get calendar events within a date range using calendarView.
-
-    Args:
-        client: GraphClient instance
-        start_dt: Start of the range
-        end_dt: End of the range
-
-    Returns: List of event dicts
-    """
+    """Get calendar events within a date range using calendarView."""
     params = {
         "startDateTime": start_dt.strftime("%Y-%m-%dT%H:%M:%S"),
         "endDateTime": end_dt.strftime("%Y-%m-%dT%H:%M:%S"),
         "$orderby": "start/dateTime",
     }
-    result = client.get("/me/calendarview", params=params)
-    return result.get("value", [])
+    return client.get_all_pages("/me/calendarview", params=params)
 
 
 def get_today_events(client: GraphClient) -> list[dict]:
@@ -76,12 +75,27 @@ def get_week_events(client: GraphClient) -> list[dict]:
     return get_calendar_view(client, start, end)
 
 
+def get_next_events(client: GraphClient, count: int = 1) -> list[dict]:
+    """Get the next upcoming event(s) from now."""
+    now = datetime.now()
+    end = now + timedelta(days=30)
+    params = {
+        "startDateTime": now.strftime("%Y-%m-%dT%H:%M:%S"),
+        "endDateTime": end.strftime("%Y-%m-%dT%H:%M:%S"),
+        "$orderby": "start/dateTime",
+        "$top": str(count),
+    }
+    result = client.get("/me/calendarview", params=params)
+    return result.get("value", [])
+
+
 def update_event(
     client: GraphClient,
     event_id: str,
     title: str | None = None,
     start: datetime | None = None,
     end: datetime | None = None,
+    attendees: list[str] | None = None,
 ) -> dict:
     """Update an existing calendar event. Only provided fields are changed."""
     body: dict = {}
@@ -91,6 +105,11 @@ def update_event(
         body["start"] = to_graph_datetime(start)
     if end is not None:
         body["end"] = to_graph_datetime(end)
+    if attendees is not None:
+        body["attendees"] = [
+            {"emailAddress": {"address": email}, "type": "required"}
+            for email in attendees
+        ]
     return client.patch(f"/me/events/{event_id}", json=body)
 
 

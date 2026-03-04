@@ -7,7 +7,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 
-def print_messages_table(messages: list[dict], console: Console | None = None) -> None:
+def print_messages_table(messages: list[dict], console: Console | None = None, full_id: bool = False) -> None:
     """Print a list of messages as a rich table."""
     console = console or Console()
     table = Table(title="Messages")
@@ -18,7 +18,7 @@ def print_messages_table(messages: list[dict], console: Console | None = None) -
     table.add_column("Status")
 
     for msg in messages:
-        msg_id = msg.get("id", "")[:8]
+        msg_id = msg.get("id", "") if full_id else msg.get("id", "")[:8]
         from_addr = ""
         if from_field := msg.get("from"):
             from_addr = from_field.get("emailAddress", {}).get("address", "")
@@ -63,6 +63,9 @@ def print_message_detail(message: dict, console: Console | None = None) -> None:
     if cc_addrs:
         header += f"[bold]CC:[/bold]      {cc_addrs}\n"
     header += f"[bold]Date:[/bold]    {date}"
+
+    if message.get("hasAttachments"):
+        header += "\n[bold]Attachments:[/bold] Yes (use --download to save)"
 
     console.print(Panel(header, title="Message"))
 
