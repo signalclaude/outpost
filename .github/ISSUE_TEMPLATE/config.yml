@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Permissions & Scopes Help
+    url: https://github.com/signalclaude/outpost/blob/main/docs/permissions.md
+    about: Check which Azure AD scopes are needed for each feature

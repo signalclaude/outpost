@@ -1,0 +1,60 @@
+name: MCP Server / Claude Desktop Issue
+description: Problems with the MCP server or Claude Desktop integration
+labels: ["mcp"]
+body:
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: Issue type
+      options:
+        - Tools not loading in Claude Desktop
+        - MCP server won't start
+        - Tool returns an error
+        - Workspace file operations not working
+        - SSE transport issue
+        - Other MCP problem
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the problem. Include which MCP tool(s) are affected if applicable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Claude Desktop config
+      description: Paste your `claude_desktop_config.json` MCP section (remove any secrets).
+      render: json
+
+  - type: textarea
+    id: error-output
+    attributes:
+      label: Error output
+      description: Paste any error messages from Claude Desktop or the MCP server.
+      render: shell
+
+  - type: dropdown
+    id: transport
+    attributes:
+      label: Transport
+      options:
+        - stdio (default)
+        - SSE
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - Windows
+        - macOS
+        - Linux
+    validations:
+      required: true

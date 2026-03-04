@@ -1,0 +1,50 @@
+name: Feature Request
+description: Suggest a new command, option, or integration
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Where does this feature fit?
+      options:
+        - Tasks (To Do)
+        - Calendar
+        - Email
+        - Contacts
+        - Teams
+        - MCP Server / Claude Desktop
+        - Auth / Multi-account
+        - Output / Formatting
+        - New Integration
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What would you like?
+      description: Describe the feature and the problem it solves.
+      placeholder: "It would be useful to..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed
+    attributes:
+      label: Proposed solution
+      description: How do you envision this working? CLI syntax, MCP tool name, etc.
+      placeholder: |
+        ```
+        outpost cal recurring add "Standup" --start "9am" --repeat weekdays
+        ```
+
+  - type: dropdown
+    id: scope-concern
+    attributes:
+      label: Does this require new Graph API permissions?
+      description: Check docs/permissions.md if unsure.
+      options:
+        - "No — works with existing scopes"
+        - "Yes — needs new scopes"
+        - "Not sure"

@@ -1,0 +1,62 @@
+name: Auth / Permissions Issue
+description: Problems with login, consent, or Azure AD permissions
+labels: ["auth"]
+body:
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: Issue type
+      options:
+        - Cannot log in (device code flow fails)
+        - "Need admin approval" error
+        - "Insufficient privileges" error
+        - Token expired / refresh not working
+        - Teams feature not working after consent
+        - Multi-account / profile issue
+        - Other auth problem
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the problem and the exact error message.
+    validations:
+      required: true
+
+  - type: textarea
+    id: error-output
+    attributes:
+      label: Error output
+      description: Paste the full error message.
+      render: shell
+
+  - type: dropdown
+    id: account-type
+    attributes:
+      label: Microsoft account type
+      options:
+        - Personal (outlook.com / hotmail)
+        - Work / School (Microsoft 365)
+        - Not sure
+    validations:
+      required: true
+
+  - type: dropdown
+    id: teams-enabled
+    attributes:
+      label: Teams feature enabled?
+      options:
+        - "Yes"
+        - "No"
+        - Not sure
+
+  - type: dropdown
+    id: admin
+    attributes:
+      label: Are you a tenant admin?
+      options:
+        - "Yes"
+        - "No"
+        - "Not sure / Personal account"
