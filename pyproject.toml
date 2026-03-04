@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "outpost-cli"
+version = "0.1.0"
+description = "A fast CLI for Microsoft Outlook via Microsoft Graph API"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "Scott Singleton" }]
+keywords = ["outlook", "microsoft", "graph", "cli", "tasks", "calendar"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "typer>=0.9",
+    "httpx>=0.25",
+    "msal>=1.24",
+    "msal-extensions>=1.0",
+    "rich>=13.0",
+    "parsedatetime>=2.6",
+    "python-dateutil>=2.8",
+    "fastmcp>=2.0",
+]
+
+[project.optional-dependencies]
+sse = [
+    "uvicorn>=0.20",
+]
+dev = [
+    "pytest>=7.0",
+    "respx>=0.20",
+    "ruff>=0.1",
+]
+
+[project.scripts]
+outpost = "outpost.cli:app_entry"
+outpost-mcp = "outpost.mcp_server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/outpost"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py310"
