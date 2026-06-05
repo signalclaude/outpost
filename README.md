@@ -28,7 +28,7 @@ A fast CLI for Microsoft **Tasks**, **Calendar**, **Email**, **Contacts**, and *
 # Install (Python 3.10+)
 pip install git+https://github.com/signalclaude/outpost.git
 
-# Connect your Microsoft account
+# Connect your Microsoft account (opens your browser to sign in)
 outpost setup
 
 # You're ready
@@ -36,6 +36,9 @@ outpost task list
 outpost cal today
 outpost mail list --unread
 outpost teams chats
+
+# Re-authenticate any time (e.g. after a token expires)
+outpost auth login
 ```
 
 ## What Can It Do?
@@ -57,7 +60,7 @@ Every command supports `--output json` for scripting and AI agents.
 See the **[Wiki](https://github.com/signalclaude/outpost/wiki)** for full documentation:
 
 - [Installation](https://github.com/signalclaude/outpost/wiki/Installation) — pip, wheel, from source
-- [Setup & Authentication](https://github.com/signalclaude/outpost/wiki/Setup-&-Authentication) — device code flow, token storage
+- [Setup & Authentication](https://github.com/signalclaude/outpost/wiki/Setup-&-Authentication) — browser sign-in, token storage
 - [Commands](https://github.com/signalclaude/outpost/wiki/Commands--Tasks) — Tasks, Calendar, Email, Contacts, Teams
 - [MCP Server](https://github.com/signalclaude/outpost/wiki/MCP-Server--Local-Setup) — Claude Desktop integration (39 tools)
 - [Remote Access](https://github.com/signalclaude/outpost/wiki/MCP-Server--Remote-Access) — SSE/streamable-http for mobile/LAN

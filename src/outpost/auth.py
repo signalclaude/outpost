@@ -1,4 +1,4 @@
-"""Authentication module for outpost CLI (MSAL device code flow)."""
+"""Authentication module for outpost CLI (MSAL interactive + device code flow)."""
 
 import sys
 
@@ -66,8 +66,51 @@ def _get_msal_app() -> msal.PublicClientApplication | None:
     return _app_instances[profile]
 
 
+def login_browser(scopes: list[str] | None = None) -> bool:
+    """Interactive login via the system browser (auth code + PKCE).
+
+    Opens the default browser and captures the redirect on a loopback port.
+    Unlike the device code flow, this is NOT blocked by Conditional Access
+    policies that restrict device-code authentication (AADSTS error: "an
+    authentication flow that is restricted by your admin"). Prefer this flow.
+
+    Requires the Azure app registration to list ``http://localhost`` as a
+    redirect URI under "Mobile and desktop applications" (public client).
+
+    Args:
+        scopes: OAuth scopes to request. Defaults to get_active_scopes().
+
+    Returns True on success, False on failure.
+    """
+    app = _get_msal_app()
+    if app is None:
+        stderr.print(
+            "[yellow]Azure AD app not configured yet.[/yellow]\n"
+            "Set DEFAULT_CLIENT_ID in outpost/config.py after registering your Azure AD app."
+        )
+        return False
+
+    if scopes is None:
+        scopes = get_active_scopes()
+
+    stderr.print("\n[bold]Opening your browser to sign in...[/bold]")
+    stderr.print("[dim]If it doesn't open, check for a browser window or tab.[/dim]")
+
+    result = app.acquire_token_interactive(scopes=scopes)
+    if "access_token" in result:
+        stderr.print("[green]Successfully logged in![/green]")
+        return True
+
+    stderr.print(f"[red]Login failed:[/red] {result.get('error_description', 'unknown error')}")
+    return False
+
+
 def login_interactive(scopes: list[str] | None = None) -> bool:
     """Run the device code flow for interactive login.
+
+    Note: many tenants block this flow via Conditional Access. Prefer
+    ``login_browser`` unless a headless/no-browser environment requires
+    device code.
 
     Args:
         scopes: OAuth scopes to request. Defaults to get_active_scopes().
@@ -128,15 +171,33 @@ def require_token() -> str:
 
 
 def get_auth_status() -> dict:
-    """Return current auth status as a dict."""
+    """Return current auth status as a dict.
+
+    Validates the cached token rather than just checking for a cached account.
+    A cached account whose refresh token has expired (90-day inactivity) or
+    no longer covers the active scopes is reported as not logged in, with a
+    message telling the user to re-authenticate.
+    """
     app = _get_msal_app()
     if app is None:
         return {"logged_in": False, "username": None, "message": "Azure AD app not configured"}
 
     accounts = app.get_accounts()
-    if accounts:
-        return {
-            "logged_in": True,
-            "username": accounts[0].get("username", "unknown"),
-        }
-    return {"logged_in": False, "username": None}
+    if not accounts:
+        return {"logged_in": False, "username": None, "message": "No account signed in"}
+
+    username = accounts[0].get("username", "unknown")
+    result = app.acquire_token_silent_with_error(get_active_scopes(), account=accounts[0])
+    if result and "access_token" in result:
+        return {"logged_in": True, "username": username}
+
+    # Account is cached but the token can't be silently obtained — expired
+    # refresh token or scope change. Surface the underlying reason.
+    detail = result.get("error_description", "session expired") if result else "session expired"
+    first_line = detail.splitlines()[0] if detail else "session expired"
+    return {
+        "logged_in": False,
+        "username": username,
+        "message": f"Session expired for {username} — run 'outpost auth login' to re-authenticate.",
+        "detail": first_line,
+    }

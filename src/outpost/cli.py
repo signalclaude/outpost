@@ -991,7 +991,7 @@ def require_feature(feature: str):
 @handle_errors
 def setup():
     """Interactive first-time setup wizard."""
-    from outpost.auth import login_interactive
+    from outpost.auth import login_browser
     from outpost.config import load_config, save_config, get_active_scopes, get_workspace_dir
 
     stderr.print("[bold]Welcome to Outpost![/bold]")
@@ -1034,13 +1034,37 @@ def setup():
     get_workspace_dir()
 
     scopes = get_active_scopes(config)
-    success = login_interactive(scopes=scopes)
+    success = login_browser(scopes=scopes)
 
     if success:
         if "teams" in enabled:
             stderr.print("[green]Teams access:[/green] enabled")
         else:
             stderr.print("[dim]Teams access:[/dim] disabled")
+
+
+@auth_app.command("login")
+@handle_errors
+def auth_login(
+    device: bool = typer.Option(
+        False, "--device", help="Use device-code flow instead of the browser (headless/no-browser only)"
+    ),
+):
+    """Sign in (or re-authenticate) without running the full setup wizard.
+
+    Defaults to interactive browser login, which is not blocked by Conditional
+    Access policies that restrict device-code authentication.
+    """
+    from outpost.auth import login_browser, login_interactive
+    from outpost.config import get_active_scopes
+
+    scopes = get_active_scopes()
+    if device:
+        success = login_interactive(scopes=scopes)
+    else:
+        success = login_browser(scopes=scopes)
+    if not success:
+        raise typer.Exit(1)
 
 
 @auth_app.command("status")
@@ -1060,8 +1084,10 @@ def auth_status(
     else:
         if status["logged_in"]:
             stderr.print(f"[green]Logged in[/green] as [bold]{status['username']}[/bold]")
+        elif status.get("message"):
+            stderr.print(f"[yellow]{status['message']}[/yellow]")
         else:
-            stderr.print("[yellow]Not logged in.[/yellow] Run [bold]outpost setup[/bold] to connect.")
+            stderr.print("[yellow]Not logged in.[/yellow] Run [bold]outpost auth login[/bold] to connect.")
 
 
 # ── MCP commands ────────────────────────────────────────────────────────────
@@ -1091,7 +1117,7 @@ def mcp_serve(
         stderr.print(f"API key required — run [bold]outpost mcp key[/bold] to view")
         server.run(transport=transport, host=host, port=port)
     else:
-        mcp.run()
+        mcp.run(show_banner=False)
 
 
 @mcp_app.command("key")

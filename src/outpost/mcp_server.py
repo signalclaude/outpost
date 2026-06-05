@@ -1,5 +1,15 @@
 """MCP server exposing Outpost operations as tools for Claude Desktop."""
 
+import os
+
+# Disable FastMCP's startup network update-check and banner BEFORE importing
+# fastmcp — its global settings are read at import time. The update-check makes
+# a network request during stdio startup, which can stall the transport past
+# Claude Desktop's init timeout on a slow/offline network and surface as
+# "can't connect to MCP server". Both are opt-outable via env; we force them off.
+os.environ.setdefault("FASTMCP_CHECK_FOR_UPDATES", "off")
+os.environ.setdefault("FASTMCP_SHOW_SERVER_BANNER", "false")
+
 import base64
 from datetime import datetime, timedelta
 from typing import Optional
