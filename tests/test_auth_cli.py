@@ -13,7 +13,7 @@ runner = CliRunner()
 
 class TestSetup:
     def test_setup_calls_login(self):
-        with patch("outpost.auth.login_interactive", return_value=True) as mock_login:
+        with patch("outpost.auth.login_browser", return_value=True) as mock_login:
             result = runner.invoke(app, ["setup"], input="n\nUTC\n")
         assert result.exit_code == 0
         mock_login.assert_called_once()
@@ -26,7 +26,7 @@ class TestSetup:
         assert "not configured" in result.output.lower() or "Azure" in result.output
 
     def test_setup_enable_teams(self):
-        with patch("outpost.auth.login_interactive", return_value=True) as mock_login, \
+        with patch("outpost.auth.login_browser", return_value=True) as mock_login, \
              patch("outpost.config.save_config") as mock_save:
             result = runner.invoke(app, ["setup"], input="y\nAmerica/New_York\n")
         assert result.exit_code == 0
@@ -59,3 +59,38 @@ class TestAuthStatus:
         parsed = json.loads(result.output)
         assert parsed["logged_in"] is True
         assert parsed["username"] == "user@example.com"
+
+    def test_status_expired_shows_message(self):
+        status = {
+            "logged_in": False,
+            "username": "user@example.com",
+            "message": "Session expired for user@example.com — run 'outpost auth login' to re-authenticate.",
+        }
+        with patch("outpost.auth.get_auth_status", return_value=status):
+            result = runner.invoke(app, ["auth", "status"])
+        assert result.exit_code == 0
+        assert "expired" in result.output.lower()
+        assert "auth login" in result.output
+
+
+class TestAuthLogin:
+    def test_login_browser_default(self):
+        with patch("outpost.auth.login_browser", return_value=True) as mock_browser, \
+             patch("outpost.auth.login_interactive") as mock_device:
+            result = runner.invoke(app, ["auth", "login"])
+        assert result.exit_code == 0
+        mock_browser.assert_called_once()
+        mock_device.assert_not_called()
+
+    def test_login_device_flag(self):
+        with patch("outpost.auth.login_interactive", return_value=True) as mock_device, \
+             patch("outpost.auth.login_browser") as mock_browser:
+            result = runner.invoke(app, ["auth", "login", "--device"])
+        assert result.exit_code == 0
+        mock_device.assert_called_once()
+        mock_browser.assert_not_called()
+
+    def test_login_failure_exits_nonzero(self):
+        with patch("outpost.auth.login_browser", return_value=False):
+            result = runner.invoke(app, ["auth", "login"])
+        assert result.exit_code == 1

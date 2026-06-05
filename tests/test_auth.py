@@ -22,13 +22,28 @@ class TestGetAuthStatus:
             status = get_auth_status()
         assert status["logged_in"] is False
 
-    def test_with_account(self):
+    def test_with_account_valid_token(self):
         mock_app = MagicMock()
         mock_app.get_accounts.return_value = [{"username": "user@example.com"}]
+        mock_app.acquire_token_silent_with_error.return_value = {"access_token": "tok"}
         with patch("outpost.auth._get_msal_app", return_value=mock_app):
             status = get_auth_status()
         assert status["logged_in"] is True
         assert status["username"] == "user@example.com"
+
+    def test_with_account_expired_token(self):
+        """Cached account but expired refresh token -> not logged in, with message."""
+        mock_app = MagicMock()
+        mock_app.get_accounts.return_value = [{"username": "user@example.com"}]
+        mock_app.acquire_token_silent_with_error.return_value = {
+            "error": "invalid_grant",
+            "error_description": "AADSTS700082: The refresh token has expired.\nTrace ID: x",
+        }
+        with patch("outpost.auth._get_msal_app", return_value=mock_app):
+            status = get_auth_status()
+        assert status["logged_in"] is False
+        assert status["username"] == "user@example.com"
+        assert "auth login" in status["message"]
 
 
 class TestGetToken:
