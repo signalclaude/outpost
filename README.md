@@ -1,3 +1,19 @@
+> [!IMPORTANT]
+> ## This project is archived. Its successor is [**OutPost2**](https://github.com/BrewingCoder/outpost2).
+>
+> `outpost` was a single-user CLI and a local stdio MCP server: it ran on the machine you
+> were sitting at, held one account per profile, and could not be reached from a phone.
+>
+> **[OutPost2](https://github.com/BrewingCoder/outpost2)** is the successor — a self-hosted,
+> multi-user server with *named* connections, built for the case this CLI could not serve:
+> a voice conversation while driving. You say *"check work email"* and it knows which
+> mailbox; *"all"* checks every one. Several unrelated Entra tenants at once, plus YouTrack
+> and GitHub, through one connection model.
+>
+> It is a rewrite rather than a port — no code is shared — so there is no upgrade path from
+> here. `outpost` remains readable and forkable at its final state; it receives no further
+> updates, and its open issues will not be worked.
+
 # outpost
 
 Your outpost to Outlook — from the terminal.
